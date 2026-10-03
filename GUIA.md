@@ -150,10 +150,84 @@ Invoke-RestMethod -Method Post -Uri "https://SEU-ENDERECO.onrender.com/webhooks/
 
 ## 8. Conferindo se está tudo certo
 
-1. Abra `https://SEU-ENDERECO.onrender.com/`. Deve mostrar `"whatsapp": true` e `"instagram": true` depois dos passos 5 e 6.
+1. Abra `https://SEU-ENDERECO.onrender.com/healthz`. Deve mostrar `"whatsapp": true` e `"instagram": true` depois dos passos 5 e 6.
 2. Peça para alguém mandar "oi" no WhatsApp e no Direct. Em até 30 segundos a conversa aparece em **Inbox → Mensagens**.
 3. Responda pelo painel e confira no celular do cliente.
 4. Se algo não chegar, olhe os **Logs** do serviço no Render: as mensagens de erro estão em português.
+
+## 9. Site e painel no seu domínio
+
+O mesmo servidor entrega três coisas:
+
+| Endereço | O que é |
+|---|---|
+| `https://www.esro-papelaria.com.br/` | o site da ESRO (pasta `site/`) |
+| `https://www.esro-papelaria.com.br/painel` | o painel administrativo, com login por senha (pasta `painel/`) |
+| `https://www.esro-papelaria.com.br/healthz` | resposta curta para conferir se o servidor está no ar |
+
+### 9.1 Senha do painel
+1. No Render, abra o serviço **esro-conexoes → Environment → Add Environment Variable**.
+2. Nome: `PAINEL_SENHA`. Valor: uma senha com pelo menos 10 caracteres, que você não usa em nenhum outro lugar.
+3. Salve e faça **Manual Deploy → Deploy latest commit**.
+
+Trocar a senha (ou o `MCP_SECRET`) desconecta todos os aparelhos. Dez senhas erradas seguidas bloqueiam o endereço por 15 minutos.
+
+### 9.2 Domínio do registro.br
+1. No Render: **esro-conexoes → Settings → Custom Domains → Add Custom Domain**. Adicione `www.esro-papelaria.com.br` (o Render oferece incluir também `esro-papelaria.com.br`, que passa a redirecionar para o `www`).
+2. No registro.br: entre na sua conta, clique no domínio e abra **DNS → Configurar zona DNS** (se o domínio usa outros servidores DNS, escolha antes **Utilizar os servidores DNS do Registro.br**; a mudança pode levar até 2 horas).
+3. Em **Nova entrada**, crie:
+
+   | Nome | Tipo | Valor |
+   |---|---|---|
+   | (em branco, o próprio domínio) | A | `216.24.57.1` |
+   | `www` | CNAME | `esro-conexoes.onrender.com` |
+
+   Se existir algum registro **AAAA** para o domínio, apague: a Render usa só IPv4.
+4. Salve. De volta ao Render, clique em **Verify** em cada domínio. O certificado HTTPS é emitido sozinho em alguns minutos.
+
+### 9.3 Trazer os dados que estão no painel do Claude
+1. No painel antigo (claude.ai): **Configurações → Segurança → Backup completo → Baixar**.
+2. No painel novo (`/painel`): **Configurações → Segurança → Backup completo → Restaurar** e escolha o arquivo.
+
+Imagens anexadas aos pedidos não vão no backup; anexe de novo as que precisar.
+
+### 9.4 Servidor sempre acordado
+No plano gratuito o Render "dorme" depois de 15 minutos sem visitas, e a primeira visita seguinte demora até 1 minuto.
+Para evitar isso, o repositório tem uma rotina do GitHub (`.github/workflows/manter-acordado.yml`) que visita `/healthz` a cada 10 minutos. Ela é gratuita e não precisa de conta nova.
+
+- O GitHub às vezes atrasa essas rotinas; se o site ainda dormir de vez em quando, um monitor gratuito como <https://uptimerobot.com> em `https://www.esro-papelaria.com.br/healthz` a cada 5 minutos resolve.
+- O GitHub desativa rotinas agendadas depois de 60 dias sem alteração no repositório e avisa por e-mail; basta clicar em **Enable workflow** na aba **Actions**.
+- Para desligar, apague o arquivo.
+
+### 9.4.1 Voltar o site para onde estava
+Até outubro de 2026 o `www` apontava para a hospedagem anterior (`CNAME custom-domains.chatgpt.site`). Para desfazer a mudança, troque o valor do CNAME `www` no registro.br de volta para esse endereço.
+
+### 9.5 Atualizar o site
+Troque os arquivos da pasta `site/` no GitHub e faça um novo deploy. O site não pode ter `<script>` embutido na página nem eventos como `onclick="..."` no HTML: o código fica em `site/site.js`. Essa regra faz parte da proteção do servidor.
+
+### 9.6 Contas de clientes (login e cadastro no site)
+| Endereço | O que é |
+|---|---|
+| `/entrar` | tela de entrar e de criar conta (o botão **Entrar** fica no topo do site) |
+| `/conta` | "Minha conta": pedidos do cliente, dados, troca de senha e exclusão da conta |
+| `/privacidade` | Política de Privacidade (o cadastro exige o aceite) |
+
+- **Cadastro:** nome, e-mail, WhatsApp e senha (mínimo de 8 caracteres). Cada conta nova vira uma ficha em **Clientes** no painel, com origem "site".
+- **Pedidos na conta:** o cliente vê os pedidos ligados à ficha dele (número, item, valor, situação, prazo e pagamento). Observações internas não aparecem. Para um pedido aparecer, escolha o cliente certo ao registrar o pedido no painel.
+- **Cliente que já existia:** a conta nova nunca se junta sozinha a uma ficha antiga, porque o e-mail não é confirmado. Abra a ficha nova em Clientes: se houver ficha antiga com o mesmo WhatsApp ou e-mail, aparece o botão **Unir fichas**. Confira se é a mesma pessoa antes de unir.
+- **Esqueci minha senha:** o site orienta o cliente a chamar no WhatsApp. No painel, abra a ficha do cliente → **Conta no site → Gerar link de senha nova** e envie o link para o WhatsApp da ficha. O link vale 2 horas e funciona uma vez.
+- **Trocar o e-mail de uma conta:** ainda não há tela para isso; o cliente pode excluir a conta e criar outra.
+- Não precisa de configuração nova no Render: a tabela `site_users` é criada sozinha no primeiro deploy.
+
+## 10. Segurança
+
+O que o servidor já faz sozinho e o que depende de você está no arquivo **SEGURANCA.md**. Em resumo:
+
+- Toda a comunicação é criptografada (HTTPS com certificado válido, renovado automaticamente pelo Render).
+- Webhooks da Meta só são aceitos com a assinatura correta; sem a chave secreta do app, tudo é recusado.
+- Tentativas repetidas com segredo errado bloqueiam o endereço por 15 minutos.
+- As tabelas do banco ficam fechadas para a API pública do Supabase (RLS ligado).
+- Ative a verificação em duas etapas no GitHub, no Render, no Supabase e na Meta.
 
 ## Rodando no computador (opcional, para testes)
 
