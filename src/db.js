@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 
 export async function openDb(cfg) {
   const { default: pg } = await import('pg');
-  const ssl = /localhost|127\.0\.0\.1/.test(cfg.databaseUrl) ? false : { rejectUnauthorized: false };
+  // A conexão com o banco é sempre criptografada (TLS). Com DATABASE_CA_CERT o servidor também confere o certificado do banco.
+  const local = /localhost|127\.0\.0\.1/.test(cfg.databaseUrl);
+  const ssl = local ? false : cfg.databaseCa ? { ca: cfg.databaseCa, rejectUnauthorized: true } : { rejectUnauthorized: false };
   const pool = new pg.Pool({ connectionString: cfg.databaseUrl, ssl, max: 5 });
   return { q: (sql, p) => pool.query(sql, p), exec: (sql) => pool.query(sql), close: () => pool.end() };
 }
@@ -64,6 +66,55 @@ export function repo(db) {
                                 (SELECT count(*) FROM site_orders WHERE imported=false)::int AS pedidos_site_novos`);
       return r.rows[0];
     },
+    async purgeOlderThan(days) { const r = await q(`DELETE FROM messages WHERE ts < now() - ($1 || ' days')::interval`, [String(Math.floor(days))]); return r.rowCount ?? r.affectedRows ?? 0; },
+    // ----- painel: documentos -----
+    async docsSince(after) {
+      const rows = (await q('SELECT col, id, data, deleted, seq FROM panel_docs WHERE seq > $1 ORDER BY seq', [after])).rows;
+      const seq = Number((await q('SELECT COALESCE(max(seq), 0) AS s FROM panel_docs')).rows[0].s);
+      return { seq, rows };
+    },
+    async docSet(col, id, data) {
+      const r = await q(`INSERT INTO panel_docs (col, id, data, seq) VALUES ($1, $2, $3::jsonb, nextval('panel_seq'))
+                         ON CONFLICT (col, id) DO UPDATE SET data = EXCLUDED.data, deleted = false, seq = EXCLUDED.seq, updated_at = now() RETURNING data, seq`, [col, id, JSON.stringify(data)]);
+      return { data: r.rows[0].data, seq: Number(r.rows[0].seq) };
+    },
+    async docMerge(col, id, patch) {   // troca só os campos enviados (nível de cima); cria o documento se não existir
+      const r = await q(`INSERT INTO panel_docs (col, id, data, seq) VALUES ($1, $2, $3::jsonb, nextval('panel_seq'))
+                         ON CONFLICT (col, id) DO UPDATE SET data = CASE WHEN panel_docs.deleted THEN EXCLUDED.data ELSE panel_docs.data || EXCLUDED.data END,
+                           deleted = false, seq = EXCLUDED.seq, updated_at = now() RETURNING data, seq`, [col, id, JSON.stringify(patch)]);
+      return { data: r.rows[0].data, seq: Number(r.rows[0].seq) };
+    },
+    async docDelete(col, id) {         // apaga o conteúdo e deixa só a marca de exclusão, para os outros aparelhos saberem
+      const r = await q(`UPDATE panel_docs SET data = '{}'::jsonb, deleted = true, seq = nextval('panel_seq'), updated_at = now() WHERE col = $1 AND id = $2 RETURNING seq`, [col, id]);
+      return { seq: r.rows[0] ? Number(r.rows[0].seq) : 0 };
+    },
+    async docCount(col) { return Number((await q('SELECT count(*) AS n FROM panel_docs WHERE col = $1', [col])).rows[0].n); },
+    async docGet(col, id) { const r = (await q('SELECT data FROM panel_docs WHERE col = $1 AND id = $2 AND deleted = false', [col, id])).rows[0]; return r ? r.data : null; },
+    async ordersOfClient(clientId) { return (await q(`SELECT id, data FROM panel_docs WHERE col = 'orders' AND deleted = false AND data->>'clientId' = $1`, [clientId])).rows; },
+    // ----- contas de clientes do site -----
+    async userCreate(u) {
+      const r = await q(`INSERT INTO site_users (id, email, name, phone, pass_hash, client_id, consent_at) VALUES ($1,$2,$3,$4,$5,$6, now())
+                         ON CONFLICT (email) DO NOTHING RETURNING *`, [u.id, u.email, u.name, u.phone, u.passHash, u.clientId || null]);
+      return r.rows[0] || null;
+    },
+    async userByEmail(email) { return (await q('SELECT * FROM site_users WHERE email = $1', [email])).rows[0] || null; },
+    async userById(id) { return (await q('SELECT * FROM site_users WHERE id = $1', [id])).rows[0] || null; },
+    async userByClient(clientId) { return (await q('SELECT * FROM site_users WHERE client_id = $1 ORDER BY created_at LIMIT 1', [clientId])).rows[0] || null; },
+    async userByReset(hash) { return (await q('SELECT * FROM site_users WHERE reset_hash = $1 AND reset_expires > now()', [hash])).rows[0] || null; },
+    async userUpdate(id, { name, phone }) { return (await q('UPDATE site_users SET name = $2, phone = $3, updated_at = now() WHERE id = $1 RETURNING *', [id, name, phone])).rows[0] || null; },
+    async userSetPass(id, passHash) {   // nova senha: encerra as sessões antigas e inutiliza qualquer link de nova senha
+      return (await q('UPDATE site_users SET pass_hash = $2, session_ver = session_ver + 1, reset_hash = NULL, reset_expires = NULL, updated_at = now() WHERE id = $1 RETURNING *', [id, passHash])).rows[0] || null;
+    },
+    async userSetReset(id, hash, minutes) { await q(`UPDATE site_users SET reset_hash = $2, reset_expires = now() + ($3 || ' minutes')::interval WHERE id = $1`, [id, hash, String(Math.floor(minutes))]); },
+    async userSetClient(id, clientId) { await q('UPDATE site_users SET client_id = $2, updated_at = now() WHERE id = $1', [id, clientId]); },
+    async userTouchLogin(id) { await q('UPDATE site_users SET last_login_at = now() WHERE id = $1', [id]); },
+    async userDelete(id) { await q('DELETE FROM site_users WHERE id = $1', [id]); },
+    // ----- painel: arquivos -----
+    async assetPut(a) { await q('INSERT INTO panel_assets (id, name, type, size, data) VALUES ($1, $2, $3, $4, $5)', [a.id, a.name, a.type, a.data.length, a.data]); },
+    async assetGet(id) { const r = (await q('SELECT name, type, data FROM panel_assets WHERE id = $1', [id])).rows[0]; return r ? { name: r.name, type: r.type, data: Buffer.from(r.data) } : null; },
+    async assetDelete(id) { await q('DELETE FROM panel_assets WHERE id = $1', [id]); },
+    async assetList() { return (await q('SELECT id, name, type, size, created_at FROM panel_assets ORDER BY created_at DESC')).rows.map(r => ({ id: r.id, name: r.name, contentType: r.type, sizeBytes: r.size, url: '/_blob/' + r.id })); },
+    async assetTotal() { return Number((await q('SELECT COALESCE(sum(size), 0) AS n FROM panel_assets')).rows[0].n); },
     async kvGet(k) { return (await q('SELECT value, updated_at FROM kv WHERE key=$1', [k])).rows[0] || null; },
     async kvSet(k, v) { await q(`INSERT INTO kv (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`, [k, v]); },
   };

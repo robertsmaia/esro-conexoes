@@ -5,9 +5,9 @@ export class ChannelError extends Error {
   constructor(message, detail) { super(message); this.detail = detail; }
 }
 
+// Confere a assinatura X-Hub-Signature-256 da Meta. Sem a chave secreta configurada, recusa (nunca aceita webhook sem assinatura).
 export function verifySignature(appSecret, rawBody, header) {
-  if (!appSecret) return true; // sem segredo configurado (ex.: 360dialog) não há assinatura para validar
-  if (!header || !rawBody) return false;
+  if (!appSecret || !header || !rawBody) return false;
   const expected = 'sha256=' + crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
   const a = Buffer.from(expected), b = Buffer.from(String(header));
   return a.length === b.length && crypto.timingSafeEqual(a, b);

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Minha conta | ESRO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23E7B5A2'/%3E%3Cpath d='M18 25c0-8 10-10 14-2 4-8 14-6 14 2 0 10-14 19-14 19S18 35 18 25Z' fill='none' stroke='%2340261C' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/conta.css">
+</head>
+<body data-page="conta">
+  <div class="top"><a href="https://wa.me/5511992481676" target="_blank" rel="noopener noreferrer">Pedidos e orçamentos pelo WhatsApp: (11) 99248-1676</a></div>
+  <header class="header">
+    <nav class="wrap nav" aria-label="Navegação">
+      <a class="brand" href="/" aria-label="ESRO, página inicial">Esro<span aria-hidden="true">♥</span></a>
+      <div class="nav-links"><a class="back" href="/">Voltar ao site</a><button class="btn secondary small" type="button" id="logoutBtn">Sair</button></div>
+    </nav>
+  </header>
+
+  <main class="account">
+    <div class="wrap">
+      <p class="loading" id="loading" role="status">Abrindo a sua conta…</p>
+      <noscript><p class="msg bad">Para ver a sua conta é preciso ativar o JavaScript do navegador.</p></noscript>
+
+      <div id="content" hidden>
+        <div class="account-head">
+          <div><h1 id="hello">Minha conta</h1><p id="since"></p></div>
+          <a class="btn primary" href="https://wa.me/5511992481676" target="_blank" rel="noopener noreferrer">Pedir orçamento pelo WhatsApp</a>
+        </div>
+
+        <div class="account-grid">
+          <section class="card" aria-labelledby="ordersTitle">
+            <h2 id="ordersTitle">Meus pedidos</h2>
+            <ul class="orders" id="orders"></ul>
+            <div class="empty" id="ordersEmpty" hidden>
+              <p>Nenhum pedido registrado por enquanto. Assim que você fechar um pedido com a ESRO, ele aparece aqui com o prazo e o pagamento.</p>
+              <a class="btn secondary small" href="/#catalogo">Ver o catálogo</a>
+            </div>
+            <p class="msg bad" id="ordersError" role="alert" hidden></p>
+          </section>
+
+          <div>
+            <section class="card" aria-labelledby="dataTitle">
+              <h2 id="dataTitle">Meus dados</h2>
+              <form id="form-dados" novalidate>
+                <label class="field"><span class="lab">Nome</span>
+                  <span class="line"><input type="text" name="nome" id="me-nome" autocomplete="name" maxlength="80" required aria-describedby="me-nome-err"></span>
+                  <small class="err" id="me-nome-err" hidden></small></label>
+                <label class="field"><span class="lab">WhatsApp <small>com DDD</small></span>
+                  <span class="line"><input type="tel" name="telefone" id="me-telefone" autocomplete="tel-national" inputmode="tel" maxlength="20" required data-phone aria-describedby="me-telefone-err"></span>
+                  <small class="err" id="me-telefone-err" hidden></small></label>
+                <label class="field"><span class="lab">E-mail</span>
+                  <span class="line"><input type="email" id="me-email" readonly aria-describedby="me-email-hint"></span>
+                  <small class="hint" id="me-email-hint">Para trocar o e-mail, fale com a ESRO pelo WhatsApp.</small></label>
+                <p class="msg" role="status" hidden></p>
+                <div class="actions"><button class="btn primary" type="submit" data-busy="Salvando…">Salvar dados</button></div>
+              </form>
+            </section>
+
+            <section class="card" aria-labelledby="passTitle">
+              <h2 id="passTitle">Senha</h2>
+              <form id="form-senha" novalidate>
+                <input type="text" name="username" id="pw-user" autocomplete="username" hidden>
+                <label class="field"><span class="lab">Senha atual</span>
+                  <span class="line has-peek"><input type="password" name="atual" id="pw-atual" autocomplete="current-password" required aria-describedby="pw-atual-err"><button class="peek" type="button" data-peek="pw-atual" aria-pressed="false">Mostrar</button></span>
+                  <small class="err" id="pw-atual-err" hidden></small></label>
+                <label class="field"><span class="lab">Senha nova <small>pelo menos 8 caracteres</small></span>
+                  <span class="line has-peek"><input type="password" name="nova" id="pw-nova" autocomplete="new-password" minlength="8" maxlength="128" required aria-describedby="pw-nova-err"><button class="peek" type="button" data-peek="pw-nova" aria-pressed="false">Mostrar</button></span>
+                  <small class="err" id="pw-nova-err" hidden></small></label>
+                <p class="msg" role="status" hidden></p>
+                <div class="actions"><button class="btn secondary" type="submit" data-busy="Trocando…">Trocar senha</button></div>
+              </form>
+            </section>
+
+            <section class="card" aria-labelledby="delTitle">
+              <h2 id="delTitle">Excluir conta</h2>
+              <p>Apaga o seu login e a sua senha. Os pedidos que você já fez continuam nos registros da ESRO pelo tempo exigido por lei.</p>
+              <details class="danger-zone">
+                <summary>Quero excluir a minha conta</summary>
+                <form id="form-excluir" novalidate>
+                  <label class="field"><span class="lab">Confirme com a sua senha</span>
+                    <span class="line has-peek"><input type="password" name="senha" id="del-senha" autocomplete="current-password" required aria-describedby="del-senha-err"><button class="peek" type="button" data-peek="del-senha" aria-pressed="false">Mostrar</button></span>
+                    <small class="err" id="del-senha-err" hidden></small></label>
+                  <p class="msg bad" role="alert" hidden></p>
+                  <div class="actions"><button class="btn danger" type="submit" data-busy="Excluindo…">Excluir minha conta</button></div>
+                </form>
+              </details>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="foot-mini"><div class="wrap"><span>© 2026 ESRO. Papelaria com propósito.</span><a href="/privacidade">Política de Privacidade</a></div></footer>
+  <script src="/conta.js"></script>
+</body>
+</html>

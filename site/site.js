@@ -1,0 +1,14 @@
+/* ESRO — interações do site (carrinho de orçamento, filtros, menu) */
+const cart=document.querySelector('#cart'),overlay=document.querySelector('#overlay'),count=document.querySelector('#count'),items=document.querySelector('#cartItems'),toast=document.querySelector('#toast');let total=0; const selected=[];
+    const openCart=()=>{cart.classList.add('open');overlay.classList.add('show')},closeCart=()=>{cart.classList.remove('open');overlay.classList.remove('show')};
+    document.querySelector('#cartOpen').onclick=openCart;document.querySelector('#cartClose').onclick=closeCart;overlay.onclick=closeCart;
+    document.querySelectorAll('.add').forEach(b=>b.onclick=()=>{total++;selected.push(b.dataset.name);document.querySelector('#quoteCart').href='https://wa.me/5511992481676?text='+encodeURIComponent('Olá, ESRO! Gostaria de um orçamento para: '+selected.join(', ')+'.');count.textContent=total;if(total===1)items.innerHTML='';items.insertAdjacentHTML('beforeend',`<div class="cart-row"><div class="thumb"></div><div><strong>${b.dataset.name}</strong><small style="display:block">Quantidade 1</small></div><strong>✓</strong></div>`);toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1600)});
+    document.querySelectorAll('.chips').forEach(group=>group.querySelectorAll('.chip').forEach(chip=>chip.onclick=()=>{group.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));chip.classList.add('active')}));
+    document.querySelector('#emailForm').onsubmit=e=>{e.preventDefault();toast.textContent='Bem-vindo ao Círculo ESRO!';toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2200);e.target.reset()};
+
+    document.querySelector('.menu').onclick=()=>{const expanded=document.querySelector('.links').classList.toggle('mobile-open');document.querySelector('.menu').setAttribute('aria-expanded',String(expanded))};
+    document.querySelectorAll('.links a').forEach(a=>a.addEventListener('click',()=>{document.querySelector('.links').classList.remove('mobile-open');document.querySelector('.menu').setAttribute('aria-expanded','false')}));
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeCart()});
+
+    /* Conta do cliente: se a pessoa já entrou, o botão "Entrar" vira o primeiro nome dela e leva para "Minha conta". */
+    (function(){const link=document.querySelector('#accountLink');if(!link)return;fetch('/api/conta/sessao',{headers:{'X-ESRO':'1'},credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(!j||!j.conta)return;link.textContent=String(j.conta.nome||'').split(' ')[0]||'Minha conta';link.href='/conta';link.setAttribute('aria-label','Minha conta')}).catch(()=>{})})();

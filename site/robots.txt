@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /painel
+Disallow: /_blob/
+Disallow: /mcp/
+Disallow: /webhooks/
+Disallow: /api/
+Disallow: /conta
+Disallow: /entrar

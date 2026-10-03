@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="Entre ou crie sua conta na ESRO para acompanhar seus pedidos.">
+  <title>Entrar ou criar conta | ESRO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23E7B5A2'/%3E%3Cpath d='M18 25c0-8 10-10 14-2 4-8 14-6 14 2 0 10-14 19-14 19S18 35 18 25Z' fill='none' stroke='%2340261C' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/conta.css">
+</head>
+<body data-page="entrar">
+  <div class="top"><a href="https://wa.me/5511992481676" target="_blank" rel="noopener noreferrer">Pedidos e orçamentos pelo WhatsApp: (11) 99248-1676</a></div>
+  <header class="header">
+    <nav class="wrap nav" aria-label="Navegação">
+      <a class="brand" href="/" aria-label="ESRO, página inicial">Esro<span aria-hidden="true">♥</span></a>
+      <a class="back" href="/">Voltar ao site</a>
+    </nav>
+  </header>
+
+  <main class="auth">
+    <section class="auth-form">
+      <div class="auth-inner">
+        <h1 class="auth-title" id="authTitle">Entre na sua conta</h1>
+
+        <div id="authTabs">
+          <div class="tabs" role="tablist" aria-label="Entrar ou criar conta">
+            <button class="tab" type="button" role="tab" id="tab-entrar" aria-controls="form-entrar" aria-selected="true">Entrar</button>
+            <button class="tab" type="button" role="tab" id="tab-cadastro" aria-controls="form-cadastro" aria-selected="false" tabindex="-1">Criar conta</button>
+          </div>
+          <div class="sheet">
+            <form id="form-entrar" role="tabpanel" aria-labelledby="tab-entrar" novalidate>
+              <label class="field"><span class="lab">E-mail</span>
+                <span class="line"><input type="email" name="email" id="in-email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required aria-describedby="in-email-err"></span>
+                <small class="err" id="in-email-err" hidden></small></label>
+              <label class="field"><span class="lab">Senha</span>
+                <span class="line has-peek"><input type="password" name="senha" id="in-senha" autocomplete="current-password" required aria-describedby="in-senha-err"><button class="peek" type="button" data-peek="in-senha" aria-pressed="false">Mostrar</button></span>
+                <small class="err" id="in-senha-err" hidden></small></label>
+              <p class="msg bad" role="alert" hidden></p>
+              <div class="actions"><button class="btn primary block" type="submit" data-busy="Entrando…">Entrar</button></div>
+              <div class="forgot">
+                <button class="link" type="button" id="forgotBtn" aria-expanded="false" aria-controls="forgotBox">Esqueci minha senha</button>
+                <div class="forgot-box" id="forgotBox" hidden>
+                  <p>A troca de senha é feita pelo WhatsApp. Chame a ESRO pelo número que você cadastrou e peça o link para criar uma senha nova.</p>
+                  <a class="btn secondary small" href="https://wa.me/5511992481676?text=Ol%C3%A1%2C%20ESRO!%20Esqueci%20a%20senha%20da%20minha%20conta%20no%20site.%20Pode%20me%20enviar%20o%20link%20para%20criar%20uma%20senha%20nova%3F" target="_blank" rel="noopener noreferrer">Pedir o link pelo WhatsApp</a>
+                </div>
+              </div>
+            </form>
+
+            <form id="form-cadastro" role="tabpanel" aria-labelledby="tab-cadastro" novalidate hidden>
+              <label class="field"><span class="lab">Nome</span>
+                <span class="line"><input type="text" name="nome" id="up-nome" autocomplete="name" maxlength="80" required aria-describedby="up-nome-err"></span>
+                <small class="err" id="up-nome-err" hidden></small></label>
+              <label class="field"><span class="lab">E-mail</span>
+                <span class="line"><input type="email" name="email" id="up-email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="120" required aria-describedby="up-email-err"></span>
+                <small class="err" id="up-email-err" hidden></small></label>
+              <label class="field"><span class="lab">WhatsApp <small>com DDD</small></span>
+                <span class="line"><input type="tel" name="telefone" id="up-telefone" autocomplete="tel-national" inputmode="tel" placeholder="(11) 99999-0000" maxlength="20" required data-phone aria-describedby="up-telefone-err"></span>
+                <small class="err" id="up-telefone-err" hidden></small></label>
+              <label class="field"><span class="lab">Senha <small>pelo menos 8 caracteres</small></span>
+                <span class="line has-peek"><input type="password" name="senha" id="up-senha" autocomplete="new-password" minlength="8" maxlength="128" required aria-describedby="up-senha-err"><button class="peek" type="button" data-peek="up-senha" aria-pressed="false">Mostrar</button></span>
+                <small class="err" id="up-senha-err" hidden></small></label>
+              <div class="hp" aria-hidden="true"><label>Deixe este campo em branco <input type="text" name="site" tabindex="-1" autocomplete="off"></label></div>
+              <label class="check"><input type="checkbox" name="aceite" id="up-aceite" required aria-describedby="up-aceite-err">
+                <span>Li e aceito a <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label>
+              <small class="err" id="up-aceite-err" hidden></small>
+              <p class="msg bad" role="alert" hidden></p>
+              <div class="actions"><button class="btn primary block" type="submit" data-busy="Criando sua conta…">Criar conta</button></div>
+            </form>
+          </div>
+        </div>
+
+        <div class="sheet plain" id="resetSheet" hidden>
+          <form id="form-nova" novalidate>
+            <p class="lead">Escolha a senha que você vai usar a partir de agora.</p>
+            <label class="field"><span class="lab">Senha nova <small>pelo menos 8 caracteres</small></span>
+              <span class="line has-peek"><input type="password" name="senha" id="rs-senha" autocomplete="new-password" minlength="8" maxlength="128" required aria-describedby="rs-senha-err"><button class="peek" type="button" data-peek="rs-senha" aria-pressed="false">Mostrar</button></span>
+              <small class="err" id="rs-senha-err" hidden></small></label>
+            <p class="msg bad" role="alert" hidden></p>
+            <div class="actions"><button class="btn primary block" type="submit" data-busy="Salvando…">Salvar senha nova</button></div>
+          </form>
+        </div>
+
+        <noscript><p class="msg bad">Para entrar na conta é preciso ativar o JavaScript do navegador.</p></noscript>
+      </div>
+    </section>
+
+    <aside class="auth-art" aria-label="O que a conta oferece">
+      <div class="pad">
+        <h2>Com a sua conta</h2>
+        <ul>
+          <li>Acompanhe pedidos e prazos</li>
+          <li>Veja o que já foi pago</li>
+          <li>Guarde o histórico do que pediu</li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/conta.js"></script>
+</body>
+</html>
