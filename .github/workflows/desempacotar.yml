@@ -1,0 +1,29 @@
+# Quando o arquivo esro-pacote.tgz é enviado ao repositório, esta rotina abre o pacote,
+# coloca cada arquivo na sua pasta e apaga o pacote. O Render publica em seguida.
+# Para desligar: apague este arquivo.
+name: Desempacotar pacote
+on:
+  push:
+    branches: [main]
+    paths: ['esro-pacote.tgz']
+permissions:
+  contents: write
+concurrency: desempacotar
+jobs:
+  desempacotar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Abrir o pacote
+        run: |
+          set -euo pipefail
+          if tar -tzf esro-pacote.tgz | grep -qE '(^|/)\.\.(/|$)|^/|(^|/)\.github(/|$)|(^|/)\.git(/|$)'; then echo "Pacote com caminho nao permitido"; exit 1; fi
+          tar -xzf esro-pacote.tgz --no-same-owner --no-same-permissions
+          git rm -q --cached esro-pacote.tgz
+          rm -f esro-pacote.tgz
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Atualiza o servidor (pacote)"
+          git push
