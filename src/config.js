@@ -26,6 +26,16 @@ export function loadConfig(env = process.env) {
       apiVersion: g('IG_API_VERSION', 'v25.0'),
     },
     site: { token: g('SITE_WEBHOOK_TOKEN') },
+    // Endereço público do site (para links em e-mails e para o retorno do pagamento). Sem ele, usa o endereço da própria requisição.
+    publicUrl: /^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/i.test(g('PUBLIC_URL').replace(/\/+$/, '')) ? g('PUBLIC_URL').replace(/\/+$/, '') : '',
+    // Endereços em que o site responde (usados só enquanto o PUBLIC_URL não estiver cadastrado).
+    publicHosts: g('PUBLIC_HOSTS', 'www.esro-papelaria.com.br,esro-papelaria.com.br').toLowerCase().split(',').map(h => h.trim()).filter(Boolean),
+    // Pagamento online (opcional): Mercado Pago. Sem o token, o site oferece só PIX com confirmação manual.
+    mercadopago: { token: g('MP_ACCESS_TOKEN'), secret: g('MP_WEBHOOK_SECRET') },
+    // Frete por transportadora (opcional): Melhor Envio. Sem o token, vale a tabela de entrega cadastrada no painel.
+    melhorenvio: { token: g('ME_TOKEN'), sandbox: g('ME_SANDBOX') === '1', email: g('ME_EMAIL') },
+    // E-mails automáticos (opcional): Brevo ou Resend.
+    mail: { provider: g('EMAIL_PROVIDER').toLowerCase(), key: g('EMAIL_API_KEY'), from: g('EMAIL_FROM'), owner: g('EMAIL_OWNER') },
     panel: { password: String(env.PAINEL_SENHA ?? ''), sessionDays: Math.min(90, Math.max(1, Number(g('PAINEL_SESSAO_DIAS', '30')) || 30)) },
   };
 }

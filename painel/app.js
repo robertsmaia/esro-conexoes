@@ -4,8 +4,12 @@ const fmt = v => BRL.format(+v||0);
 const CH = {
   site:{label:'Site',long:'Site / E-commerce',cls:'b-site',icon:'globe',dot:'site'},
   whatsapp:{label:'WhatsApp',long:'WhatsApp',cls:'b-wa',icon:'message-circle',dot:'wa'},
-  instagram:{label:'Instagram',long:'Instagram Direct',cls:'b-ig',icon:'instagram',dot:'ig'}
+  instagram:{label:'Instagram',long:'Instagram Direct',cls:'b-ig',icon:'instagram',dot:'ig'},
+  mercadolivre:{label:'Mercado Livre',long:'Mercado Livre',cls:'b-neutral',icon:'store',dot:''},
+  shopee:{label:'Shopee',long:'Shopee',cls:'b-neutral',icon:'shopping-cart',dot:''},
+  presencial:{label:'Presencial',long:'Presencial / feira',cls:'b-neutral',icon:'tent',dot:''}
 };
+const PAYS=[['PIX','PIX'],['Cartão','Cartão'],['Mercado Pago','Mercado Pago'],['Sinal / Orçamento','Sinal / Orçamento'],['Dinheiro','Dinheiro']];
 const STATUS = [
   {k:'novo',l:'Novo',c:'var(--site)'},
   {k:'orcamento',l:'Orçamento enviado',c:'var(--warn)'},
@@ -25,8 +29,8 @@ const shiftMonth = (d,n) => new Date(d.getFullYear(), d.getMonth()+n, 1);
 
 /* ---------- Estado ---------- */
 const S = { view:'overview', ch:'todos', q:'', orderMode:'kanban', lead:null, showChat:false, compose:'', pix:null, pixOpen:false, notifOpen:false,
-  quote:[], quoteClient:'', quotePhone:'', ready:false, dbOk:null, canWrite:true, artOrder:'', inboxTab:'live', stockTab:'todos', cTab:'todos', cMode:'list', cOrigin:'', cashTab:'lanc', cashM:'', cashAcc:'' };
-const D = { orders:[], leads:[], catalog:[], settings:{}, stock:[], clients:[], cash:[], accounts:[] };
+  quote:[], quoteClient:'', quotePhone:'', ready:false, dbOk:null, canWrite:true, artOrder:'', inboxTab:'live', stockTab:'todos', cTab:'todos', cMode:'list', cOrigin:'', cashTab:'lanc', cashM:'', cashAcc:'', lojaTab:'produtos' };
+const D = { orders:[], leads:[], catalog:[], settings:{}, stock:[], clients:[], cash:[], accounts:[], products:[], coupons:[], loja:{} };
 let DB=null, ASSETS=null, DL=null, ME=null;
 try{ const m=localStorage.getItem('esro-orderMode'); if(m) S.orderMode=m; const c=localStorage.getItem('esro-clientMode'); if(c) S.cMode=c; }catch(e){}
 
@@ -35,11 +39,13 @@ const NAV = [
  ['orders','shopping-bag','Pedidos Unificados'],
  ['clients','users','Clientes'],
  ['catalog','book-open','Catálogo & Serviços'],
+ ['loja','store','Loja online'],
  ['stock','package','Estoque'],
  ['cash','wallet','Fluxo de Caixa'],
  ['inbox','messages-square','Inbox Multicanal'],
  ['arts','palette','Personalização & Arquivos'],
  ['reports','trending-up','Relatórios & Métricas'],
+ ['monitor','activity','Monitoramento'],
  ['settings','settings','Configurações & API']
 ];
 
@@ -83,11 +89,11 @@ async function openAudit(){
 
 /* ---------- Backup completo (um arquivo com tudo) ---------- */
 const STANDALONE=!!window.ESRO_STANDALONE;   // true quando o painel roda no servidor próprio da ESRO, fora do claude.ai
-const BK_COLS=[['orders','Pedidos'],['clients','Clientes'],['leads','Atendimentos'],['stock','Estoque'],['cash','Fluxo de caixa e contas fixas'],['accounts','Contas bancárias'],['catalog','Catálogo']];
+const BK_COLS=[['orders','Pedidos'],['clients','Clientes'],['leads','Atendimentos'],['stock','Estoque'],['cash','Fluxo de caixa e contas fixas'],['accounts','Contas bancárias'],['catalog','Catálogo'],['products','Produtos da loja'],['coupons','Cupons']];
 const BK_ID=/^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 async function backupExport(){
   if(!S.ready){ toast('Aguarde os dados carregarem',1); return; }
-  const data={app:'esro-admin',version:1,at:new Date().toISOString(),settings:D.settings,collections:{}};
+  const data={app:'esro-admin',version:1,at:new Date().toISOString(),settings:D.settings,loja:D.loja,collections:{}};
   for(const [c] of BK_COLS) data.collections[c]=D[c];
   try{ await saveFile(`esro-backup-${today()}.json`,new Blob([JSON.stringify(data)],{type:'application/json'})); toast('Backup salvo'); logAct('Backup completo exportado',BK_COLS.map(([c,l])=>`${D[c].length} ${l.toLowerCase()}`).join(', ').slice(0,190));
     if(S.canWrite&&DB){ const full={...D.settings,lastBackup:today()}; try{ await DB.doc('settings/store').set(full); D.settings=full; }catch(_){} } render(); }
@@ -98,7 +104,7 @@ async function backupFile(file){
   if(!file) return; if(!DB||!S.canWrite){ toast('Restauração indisponível nesta visualização',1); return; }
   let data; try{ data=JSON.parse(await file.text()); }catch(e){ toast('Este arquivo não é um backup do painel',1); return; }
   if(!data||data.app!=='esro-admin'||typeof data.collections!=='object'){ toast('Este arquivo não é um backup do painel',1); return; }
-  const plan={file:file.name,at:data.at,settings:data.settings&&typeof data.settings==='object'?data.settings:null,cols:[]};
+  const plan={file:file.name,at:data.at,settings:data.settings&&typeof data.settings==='object'?data.settings:null,loja:data.loja&&typeof data.loja==='object'&&Object.keys(data.loja).length?data.loja:null,cols:[]};
   for(const [c,l] of BK_COLS){ const rows=(Array.isArray(data.collections[c])?data.collections[c]:[]).filter(r=>r&&typeof r==='object'&&BK_ID.test(String(r.id||'')));
     const ids=new Set(D[c].map(x=>x.id)); plan.cols.push({c,l,rows,novo:rows.filter(r=>!ids.has(r.id)).length,sub:rows.filter(r=>ids.has(r.id)).length}); }
   BK=plan; const n=plan.cols.reduce((a,x)=>a+x.rows.length,0);
@@ -116,6 +122,7 @@ async function backupApply(btn){
   const plan=BK; if(!plan||!DB) return; BK=null; if(btn) btn.disabled=true; const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const jobs=[]; for(const x of plan.cols) for(const r of x.rows){ const {id,...d}=r; jobs.push([x.c+'/'+id,d]); }
   if(plan.settings) jobs.push(['settings/store',plan.settings]);
+  if(plan.loja) jobs.push(['settings/loja',plan.loja]);
   let done=0, fail=0, stop='';
   for(const [path,d] of jobs){ if(btn) btn.textContent=`Restaurando ${done+fail+1} de ${jobs.length}…`; let ok=false, err=null;
     for(let t=0;t<4&&!ok;t++){ try{ await DB.doc(path).set(d); ok=true; }catch(e){ err=e; const c=e&&e.code; if(c==='resource_exhausted'||c==='unavailable'){ await wait(1500*(t+1)); continue; } break; } }
@@ -162,7 +169,7 @@ function notifItems(){
   return n;
 }
 function renderNav(){
-  $('#nav').innerHTML = NAV.map(([k,ic,l])=>{ let c=''; if(k==='orders'&&openOrders().length) c=`<span class="count" style="background:var(--sage)">${openOrders().length}</span>`; if(k==='inbox'){ const u=L.convs.reduce((a,x)=>a+(x.nao_lidas||0),0); if(u) c=`<span class="count">${u}</span>`; } if(k==='clients'&&dueFollow().length) c=`<span class="count" style="background:var(--warn)">${dueFollow().length}</span>`; if(k==='cash'&&dueBills().length) c=`<span class="count" style="background:var(--warn)">${dueBills().length}</span>`; if(k==='stock'&&lowStock().length) c=`<span class="count" style="background:var(--warn)">${lowStock().length}</span>`; if(k==='orders'&&L.site.length) c+=`<span class="count" style="background:var(--site);margin-left:4px">${L.site.length}</span>`;
+  $('#nav').innerHTML = NAV.filter(([k])=>canView(k)).map(([k,ic,l])=>{ let c=''; if(k==='orders'&&openOrders().length) c=`<span class="count" style="background:var(--sage)">${openOrders().length}</span>`; if(k==='inbox'){ const u=L.convs.reduce((a,x)=>a+(x.nao_lidas||0),0); if(u) c=`<span class="count">${u}</span>`; } if(k==='clients'&&dueFollow().length) c=`<span class="count" style="background:var(--warn)">${dueFollow().length}</span>`; if(k==='cash'&&dueBills().length) c=`<span class="count" style="background:var(--warn)">${dueBills().length}</span>`; if(k==='stock'&&lowStock().length) c=`<span class="count" style="background:var(--warn)">${lowStock().length}</span>`; if(k==='orders'&&L.site.length) c+=`<span class="count" style="background:var(--site);margin-left:4px">${L.site.length}</span>`;
     return `<button class="${S.view===k?'on':''}" data-nav="${k}"><i data-lucide="${ic}"></i>${l}${c}</button>`; }).join('');
   $('#chSeg').innerHTML = [['todos','Todos'],['site','Site'],['whatsapp','WhatsApp'],['instagram','Instagram']].map(([k,l])=>`<button role="tab" aria-selected="${S.ch===k}" class="${S.ch===k?'on':''}" data-ch="${k}">${k!=='todos'?`<span class="dot ${CH[k].dot}"></span>`:''}${l}</button>`).join('');
   $('#ping').hidden = notifItems().length===0;
@@ -255,7 +262,7 @@ function vOrders(){
   const head=`${roBanner()}<div class="page-head"><div><h2>Pedidos unificados</h2><p>${list.length} pedido(s) ${S.ch==='todos'?'de todos os canais':'via '+CH[S.ch].long}${S.q?` · busca: “${esc(S.q)}”`:''}</p></div>
     <div class="toolbar"><div class="seg"><button class="${S.orderMode==='kanban'?'on':''}" data-mode="kanban"><i data-lucide="columns-3"></i>Kanban</button><button class="${S.orderMode==='table'?'on':''}" data-mode="table"><i data-lucide="table-2"></i>Tabela</button></div><button class="btn" data-xl="orders"><i data-lucide="file-spreadsheet"></i>Exportar</button><button class="btn" data-print ${D.orders.length?'':'disabled'}><i data-lucide="printer"></i>Imprimir produção</button>
     <button class="btn primary" data-neworder ${S.canWrite?'':'disabled'}><i data-lucide="plus"></i>Novo pedido</button></div></div>`;
-  const siteCard = L.site.length ? `<section class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><div><h3>Pedidos novos do site</h3><p class="hint">Chegaram pelo checkout; confira e importe para o painel.</p></div>${chBadge('site',L.site.length+' novo(s)')}</div><div class="list" style="margin-top:6px">${L.site.map(o=>{const p=siteOrderPreset(o);return `<div class="row"><div class="grow"><b>${esc(p.item)}</b><small>Web ${esc(p.ref)} · ${esc(p.client||'cliente sem nome')} · ${dtime(o.recebido_em)}</small></div><b class="tnum">${p.value?fmt(p.value):''}</b>${S.canWrite?`<button class="btn sm primary" data-site-import="${o.id}"><i data-lucide="download"></i>Importar</button>`:''}</div>`}).join('')}</div></section>` : '';
+  const siteCard = L.site.length ? `<section class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><div><h3>Pedidos novos do site</h3><p class="hint">Pedidos de orçamento enviados pelo site. Confira, combine o valor com o cliente e importe para o painel.</p></div>${chBadge('site',L.site.length+' novo(s)')}</div><div class="list" style="margin-top:6px">${L.site.map(o=>{const p=siteOrderPreset(o);return `<div class="row"><div class="grow"><b>${esc(p.item)}</b><small>Web ${esc(p.ref)} · ${esc(p.client||'cliente sem nome')} · ${dtime(o.recebido_em)}</small></div><b class="tnum">${p.value?fmt(p.value):p.est?(p.est.min===p.est.max?fmt(p.est.min):fmt(p.est.min)+' a '+fmt(p.est.max)):''}</b>${S.canWrite?`<button class="btn sm primary" data-site-import="${o.id}"><i data-lucide="download"></i>Importar</button>`:''}</div>`}).join('')}</div></section>` : '';
   if(!D.orders.length) return head+siteCard+`<div class="card">${emptyState('shopping-bag','Nenhum pedido ainda','Registre cada pedido que chegar pelo site, WhatsApp ou Instagram. Ele aparece aqui, no Kanban e nas métricas.',S.canWrite?'<button class="btn primary" data-neworder><i data-lucide="plus"></i>Registrar primeiro pedido</button>':'')}</div>`;
   const ref=o=>o.ch==='site'?(o.ref?'Web '+o.ref:'Site'):(o.contact||CH[o.ch]?.label);
   if(S.orderMode==='kanban') return head+siteCard+`<p class="hint" style="margin-top:-8px">Arraste os cartões entre as colunas para mudar o status, ou clique para ver e editar.</p><div class="kanban-wrap"><div class="kanban">${STATUS.map(s=>{const it=list.filter(o=>o.status===s.k);
@@ -289,11 +296,19 @@ function openOrder(id, preset){
       <label>Categoria<select class="inp" id="f-cat" ${dis}><option value="">—</option>${opts(D.catalog.map(c=>[c.n,c.n+' '+c.t]),v.catN)}</select></label>
       <label>Tipo<select class="inp" id="f-kind" ${dis}>${opts([['digital','Serviço / material digital'],['fisico','Produto físico']],v.kind)}</select></label>
       <label>Valor (R$) <span class="req">*</span><input class="inp tnum" id="f-value" type="number" min="0" step="0.01" required value="${esc(v.value)}" ${dis}></label>
-      <label>Forma de pagamento<select class="inp" id="f-pay" ${dis}>${opts([['PIX','PIX'],['Cartão','Cartão'],['Sinal / Orçamento','Sinal / Orçamento'],['Dinheiro','Dinheiro']],v.pay)}</select></label>
+      <label>Forma de pagamento<select class="inp" id="f-pay" ${dis}>${opts(PAYS,v.pay)}</select></label>
       <label>Situação do pagamento<select class="inp" id="f-payS" ${dis}>${opts([['Aguardando','Aguardando'],['Sinal pago','Sinal pago'],['Pago','Pago']],v.payS)}</select></label>
       <label>Valor do sinal (R$)<input class="inp tnum" id="f-sinal" type="number" min="0" step="0.01" value="${esc(v.sinal||'')}" placeholder="Se vazio, conta metade do valor" ${dis}></label>
       ${o?`<label>Recebido até agora<input class="inp tnum" value="${esc(fmt(paidOf(o)))}${dueOf(o)?' · falta '+esc(fmt(dueOf(o))):''}" disabled></label>`:''}
       <label class="full">Observações / briefing<textarea class="inp" id="f-note" rows="3" ${dis}>${esc(v.note)}</textarea></label>
+      ${o&&o.loja?orderLojaBox(o):''}
+      ${o?`<div class="fieldset full"><h4>Envio e nota fiscal</h4><div class="form">
+        <label>Código de rastreio<input class="inp" id="f-track" maxlength="60" value="${esc(o.track||'')}" placeholder="Ex.: AA123456789BR" ${dis}></label>
+        <label>Link para rastrear<input class="inp" id="f-trackUrl" maxlength="400" value="${esc(o.trackUrl||'')}" placeholder="https://…" ${dis}></label>
+        <label>Nº da nota fiscal<input class="inp" id="f-nf" maxlength="40" value="${esc(o.nf||'')}" ${dis}></label>
+        <label>Link da nota fiscal (PDF)<input class="inp" id="f-nfUrl" maxlength="400" value="${esc(o.nfUrl||'')}" placeholder="https://…" ${dis}></label></div>
+        <p class="hint">O cliente vê o rastreio e a nota na página do pedido. Ao mudar o status para “Enviado”, ele recebe um e-mail (se os e-mails automáticos estiverem ligados).</p>
+        ${o.pub&&STANDALONE?copyLine('Link de acompanhamento para enviar ao cliente',siteBase()+'/pedido/'+o.pub):''}</div>`:''}
       <div class="fieldset full"><h4>Artes e briefing do cliente</h4>
         ${o?`${(o.files||[]).map((f,i)=>`<div class="file"><span class="thumb">${/^image\//.test(f.type)?`<img src="/_blob/${esc(f.id)}" alt="">`:'<i data-lucide="file-text"></i>'}</span><div class="grow"><a href="/_blob/${esc(f.id)}" target="_blank" rel="noopener" style="color:var(--text);font-weight:700;overflow-wrap:anywhere">${esc(f.name)}</a><small>${FILE_ST[f.st]?.[1]||''} · ${dshort(f.at)}</small></div>
             <select class="inp" style="width:auto" data-fst="${o.id}:${i}" ${dis}>${opts(Object.entries(FILE_ST).map(([k,a])=>[k,a[1]]),f.st)}</select>
@@ -312,6 +327,12 @@ function openOrder(id, preset){
   $('#modalRoot').dataset.client = preset&&preset.clientId || '';
   icons(); const f=$('#f-client'); if(f&&!o) f.focus();
 }
+function orderLojaBox(o){ const l=o.loja, e=l.endereco;
+  return `<div class="fieldset full"><h4>Compra pelo site</h4>
+    <div class="list">${(l.itens||[]).map(i=>`<div class="row"><div class="grow"><b>${esc(i.qtd)} × ${esc(i.nome)}</b><small style="white-space:normal">${esc([...(i.vars||[]).map(v=>v[0]+': '+v[1]),i.pers?'Personalização: '+i.pers:''].filter(Boolean).join(' · ')||'sem opções')}</small></div><b class="tnum">${esc(fmt(i.unit*i.qtd))}</b></div>`).join('')}</div>
+    <small class="hint" style="white-space:normal">Subtotal ${esc(fmt(l.subtotal))}${l.desconto>0?` · cupom ${esc(l.cupom)} − ${esc(fmt(l.desconto))}`:''} · ${esc(l.frete&&l.frete.nome||'Entrega')}: ${l.frete&&l.frete.combinar?'a combinar':l.frete&&l.frete.valor>0?esc(fmt(l.frete.valor)):'grátis'}${l.frete&&l.frete.prazo?' ('+esc(l.frete.prazo)+')':''} · <b style="color:var(--text)">Total ${esc(fmt(l.total))}</b></small>
+    ${e?`<small class="hint" style="white-space:normal"><b style="color:var(--text)">Entregar em:</b> ${esc(e.rua)}, ${esc(e.numero)}${e.complemento?' · '+esc(e.complemento):''} · ${esc(e.bairro)} · ${esc(e.cidade)}/${esc(e.uf)} · CEP ${esc(e.cep)}</small>`:''}
+    ${l.email?`<small class="hint">E-mail do cliente: ${esc(l.email)}</small>`:''}</div>`; }
 function closeModal(){ $('#modalRoot').innerHTML=''; delArm=null; }
 async function saveOrder(id){
   const g=k=>$('#f-'+k).value.trim(); const client=g('client'), item=g('item'), value=parseFloat($('#f-value').value);
@@ -319,7 +340,9 @@ async function saveOrder(id){
   if(!item){ $('#f-item').focus(); toast('Informe o item do pedido',1); return; }
   if(!(value>=0)){ $('#f-value').focus(); toast('Informe o valor do pedido',1); return; }
   const data={ch:g('ch'),status:g('status'),client,contact:g('contact'),ref:g('ref'),city:g('city'),item,catN:g('cat'),kind:g('kind'),value,pay:g('pay'),payS:g('payS'),note:g('note'),sinal:r2(parseFloat($('#f-sinal').value)||0),qty:Math.max(1,parseFloat($('#f-qty').value)||1),due:$('#f-due').value||''};
-  if(id){ const prev=D.orders.find(x=>x.id===id); data.pays=orderPays(prev,data,new Date().toISOString()); if(await write(()=>DB.doc('orders/'+id).update(data),'Pedido atualizado')) closeModal(); return; }
+  if(id){ const prev=D.orders.find(x=>x.id===id); data.pays=orderPays(prev,data,new Date().toISOString());
+    if($('#f-track')){ const u=k=>{ const t=$('#f-'+k).value.trim(); return /^https:\/\//i.test(t)?t:''; }; for(const k of ['trackUrl','nfUrl']) if($('#f-'+k).value.trim()&&!u(k)){ $('#f-'+k).focus(); toast('O link precisa começar com https://',1); return; }
+      Object.assign(data,{track:g('track'),trackUrl:u('trackUrl'),nf:g('nf'),nfUrl:u('nfUrl')}); } if(await write(()=>DB.doc('orders/'+id).update(data),'Pedido atualizado')) closeModal(); return; }
   const now=new Date(); const num=D.orders.reduce((m,o)=>Math.max(m,+o.num||0),1000)+1;
   const leadId=$('#modalRoot').dataset.lead||'', clientPre=$('#modalRoot').dataset.client||'';
   Object.assign(data,{num,at:now.toISOString(),month:monthKey(now),files:[],leadId,pays:orderPays(null,data,now.toISOString())});
@@ -508,13 +531,15 @@ function vLive(){
 }
 function siteOrderPreset(o){
   const d=o.dados||{}; const itens=Array.isArray(d.itens)?d.itens:Array.isArray(d.items)?d.items:[];
-  const iname=i=>i.nome||i.name||i.produto||i.title||'Item'; const total=+(d.total??d.valor??d.amount)||itens.reduce((a,i)=>a+(+(i.valor??i.price??0))*(+(i.qtd??i.quantity??1)),0);
+  const iname=i=>i.nome||i.name||i.produto||i.title||'Item'; const iq=i=>+(i.qtd??i.quantity??1)||1; const est=d.estimativa&&typeof d.estimativa==='object'?d.estimativa:null;
+  const total=+(d.total??d.valor??d.amount)||itens.reduce((a,i)=>a+(+(i.valor??i.price??0))*iq(i),0)||(est&&est.min&&est.min===est.max?+est.min:0);
   const item=itens.length===1?iname(itens[0]):itens.length?`Pedido do site (${itens.length} itens)`:'Pedido do site';
-  const match=catItems().find(x=>x.name.toLowerCase()===item.toLowerCase());
-  const c=d.cliente||d.customer||{}; const client=typeof c==='string'?c:(c.nome||c.name||d.nome||'');
+  const match=catItems().find(x=>x.name.toLowerCase()===item.toLowerCase())||(itens.length?catItems().find(x=>x.name.toLowerCase()===String(iname(itens[0])).toLowerCase()):null);
+  const c=d.cliente||d.customer||{}; const client=typeof c==='string'?c:(c.nome||c.name||d.nome||''); const obs=d.observacoes||d.obs||'';
+  const note=[itens.length>1?itens.map(i=>`${iq(i)}x ${iname(i)}`).join('\n'):'', obs?(itens.length>1||est?'Obs.: ':'')+obs:'', est&&(est.min||est.max)&&!total?`Estimativa mostrada no site: ${est.min===est.max?fmt(est.min):fmt(est.min)+' a '+fmt(est.max)}`:''].filter(Boolean).join('\n');
   return {ch:'site',client,contact:d.telefone||d.whatsapp||c.telefone||c.phone||d.email||c.email||'',ref:String(d.numero??d.id??o.referencia),city:d.cidade||c.cidade||'',item,catN:match?.catN||'',kind:match?.kind==='fisico'?'fisico':'digital',value:total||'',
-    pay:/pix/i.test(d.pagamento||d.payment||'')?'PIX':'Cartão',payS:(d.pago||/pago|paid|aprovado|approved/i.test(d.status||''))?'Pago':'Aguardando',
-    note:itens.length>1?itens.map(i=>`${i.qtd??i.quantity??1}x ${iname(i)}`).join('\n'):(d.observacoes||d.obs||''),siteOrderId:o.id};
+    qty:itens.length===1?iq(itens[0]):1,pay:/pix/i.test(d.pagamento||d.payment||'')?'PIX':'Cartão',payS:(d.pago||/pago|paid|aprovado|approved/i.test(d.status||''))?'Pago':'Aguardando',
+    note,siteOrderId:o.id,clientId:typeof d.clientId==='string'?d.clientId:'',est:est&&(est.min||est.max)?est:null};
 }
 
 /* ---------- Estoque ---------- */
@@ -695,14 +720,364 @@ function drawReports(){ if(!window.Chart||!$('#cLine')) return; const now=new Da
   const ds=[['site','--site'],['whatsapp','--wa'],['instagram','--ig']].map(([k,t])=>({label:CH[k].label,data:keys.map(m=>D.orders.filter(o=>o.ch===k&&o.month===m).reduce((a,o)=>a+(+o.value||0),0)),borderColor:tok(t),backgroundColor:tok(t),tension:.35,borderWidth:2.2,pointRadius:c=>c.dataIndex===5?5:2,pointHoverRadius:5}));
   charts.push(new Chart($('#cLine'),{type:'line',data:{labels:ms.map(d=>MONTHS[d.getMonth()].slice(0,3)),datasets:ds},options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt(c.raw)}`}}},scales:{x:{grid:{display:false},ticks:{color:text2}},y:{beginAtZero:true,grid:{color:line},border:{display:false},ticks:{color:text2,callback:v=>'R$ '+v.toLocaleString('pt-BR')}}}}})); }
 
+/* ---------- Monitoramento: site, redes sociais e atendimento (números guardados no servidor da ESRO) ---------- */
+const MON={data:null,loading:false,err:'',dias:30,at:0};
+async function loadMonitor(force){
+  if(!window.ESRO_API||MON.loading) return; MON.loading=true; MON.err=''; if(S.view==='monitor') render();
+  try{ MON.data=await window.ESRO_API('GET',`/monitor?dias=${MON.dias}${force?'&atualizar=1':''}`); MON.at=Date.now(); }
+  catch(e){ MON.err=(e&&e.message)||'Não foi possível carregar os números agora.'; }
+  MON.loading=false; if(S.view==='monitor') render();
+}
+const nfmt=n=>n==null?'—':Number(n).toLocaleString('pt-BR');
+const dlabel=d=>d.slice(8,10)+'/'+d.slice(5,7);
+const PAGE_NAMES={'/':'Página inicial','/entrar':'Entrar ou criar conta','/conta':'Minha conta','/privacidade':'Política de Privacidade','/entregas':'Entregas e trocas','/produto':'Páginas de produto','/finalizar':'Finalizar compra','/pedido':'Acompanhar pedido',outra:'Outras páginas'};
+function barList(rows,empty,name){ if(!rows.length||!rows.some(r=>r.n)) return `<p class="hint">${empty}</p>`; const mx=Math.max(...rows.map(r=>r.n),1);
+  return `<div class="list" style="margin-top:6px">${rows.map(r=>`<div class="row mrow"><div class="grow"><b>${esc(name?name(r.chave):r.chave)}</b>${r.sub?`<small>${esc(r.sub)}</small>`:''}</div><div class="mbar" aria-hidden="true"><div style="width:${r.n?Math.max(3,r.n/mx*100):0}%"></div></div><b class="tnum mnum">${nfmt(r.n)}</b></div>`).join('')}</div>`; }
+function vMonitor(){
+  const head=x=>`<div class="page-head"><div><h2>Monitoramento</h2><p>Visitas do site, redes sociais e atendimento em um só lugar.</p></div>${x||''}</div>`;
+  if(!window.ESRO_API) return head()+`<div class="card">${emptyState('activity','Disponível no painel do site','Os números de visitas e das redes sociais ficam no servidor da ESRO. Abra o painel em www.esro-papelaria.com.br/painel para ver.')}</div>`;
+  if(!MON.data){ if(!MON.loading&&!MON.err) setTimeout(()=>loadMonitor(),0);
+    return head()+`<div class="card">${MON.err?emptyState('wifi-off','Não foi possível carregar os números',esc(MON.err),'<button class="btn" data-mon-refresh><i data-lucide="refresh-cw"></i>Tentar de novo</button>'):'<div class="loading">Buscando os números…</div>'}</div>`; }
+  if(!MON.loading&&Date.now()-MON.at>5*60e3) setTimeout(()=>loadMonitor(),0);
+  const m=MON.data, s=m.site, a=m.atendimento, ig=m.instagram||{}, pf=ig.perfil||{};
+  const tools=`<div class="toolbar"><div class="seg">${[7,30,90].map(d=>`<button class="${MON.dias===d?'on':''}" data-mon-dias="${d}">${d} dias</button>`).join('')}</div><button class="btn" data-mon-refresh ${MON.loading?'disabled':''}><i data-lucide="refresh-cw"></i>${MON.loading?'Atualizando…':'Atualizar'}</button></div>`;
+  const fol=ig.seguidoresPorDia||[]; const dFol=fol.length>1?fol[fol.length-1].seguidores-fol[0].seguidores:null;
+  const rec=a.porDia.reduce((t,d)=>t+d.whatsapp.recebidas+d.instagram.recebidas,0), env=a.porDia.reduce((t,d)=>t+d.whatsapp.enviadas+d.instagram.enviadas,0);
+  const mins=a.respostaMedianaMin; const resp=mins==null?'sem respostas no período':mins<60?`resposta em cerca de ${mins} min`:`resposta em cerca de ${Math.round(mins/60)} h`;
+  const kpis=`<section class="grid kpis">
+    <div class="card kpi"><div class="lbl"><span class="ico"><i data-lucide="mouse-pointer-click"></i></span>Visitas ao site</div><div class="val tnum">${nfmt(s.visitas)}</div><div class="foot">${nfmt(s.paginas)} página(s) aberta(s)</div></div>
+    <div class="card kpi"><div class="lbl"><span class="ico sage"><i data-lucide="shopping-bag"></i></span>Pedidos de orçamento pelo site</div><div class="val tnum">${nfmt(s.orcamentos.recebidos)}</div><div class="foot">${s.orcamentos.importados} já viraram pedido${L.site.length?` · ${L.site.length} para importar`:''}</div></div>
+    <div class="card kpi"><div class="lbl"><span class="ico sand"><i data-lucide="instagram"></i></span>Seguidores no Instagram</div><div class="val tnum">${nfmt(pf.seguidores)}</div><div class="foot">${!ig.configurado?'Instagram não conectado':dFol==null?'evolução a partir de amanhã':`${dFol>0?'+':dFol<0?'− ':''}${nfmt(Math.abs(dFol))} no período`}</div></div>
+    <div class="card kpi"><div class="lbl"><span class="ico sage"><i data-lucide="messages-square"></i></span>Mensagens recebidas</div><div class="val tnum">${nfmt(rec)}</div><div class="foot">${resp}</div></div>
+  </section>`;
+  const funil=[{chave:'Visitaram o site',n:s.visitas},{chave:'Adicionaram item ao pedido',n:s.eventos.carrinho,sub:'cliques no botão +'},{chave:'Foram para a finalização da compra',n:s.eventos.finalizar||0},{chave:'Compraram pelo site',n:s.eventos.compra||0},{chave:'Enviaram pedido de orçamento',n:s.eventos.orcamento}];
+  const redes=m.outrasRedes||[];
+  const outras=`<section class="card"><h3>Outras redes</h3><p class="hint">Facebook, TikTok, YouTube, Pinterest e Canal do WhatsApp não têm ligação automática com o painel. Anote o número de seguidores de vez em quando (por exemplo, toda segunda) para acompanhar a evolução.</p>
+      <div class="mstats">${redes.map(r=>`<div><small>${esc(r.nome)}</small><b class="tnum">${nfmt(r.seguidores)}</b><small>${r.anotadoEm?'anotado em '+dlabel(r.anotadoEm):'ainda sem anotação'}${r.porDia.length>1?` · ${r.porDia[r.porDia.length-1].seguidores-r.porDia[0].seguidores>=0?'+':'− '}${nfmt(Math.abs(r.porDia[r.porDia.length-1].seguidores-r.porDia[0].seguidores))} no período`:''}</small></div>`).join('')}</div>
+      <div class="compose-actions" style="align-items:flex-end"><label class="fl">Rede<select class="inp" id="rd-rede">${redes.map(r=>`<option value="${esc(r.id)}">${esc(r.nome)}</option>`).join('')}</select></label><label class="fl">Seguidores hoje<input class="inp tnum" id="rd-n" type="number" min="0" step="1" style="width:150px"></label><button class="btn" data-redesave><i data-lucide="check"></i>Anotar</button></div></section>`;
+  const acoes=[{chave:'Cliques para o WhatsApp',n:s.eventos.whatsapp},{chave:'Catálogo em PDF aberto',n:s.eventos.catalogo_pdf},{chave:'Contas criadas',n:s.contas.novas,sub:`${s.contas.total} conta(s) no total`},{chave:'Pedidos de novidades por e-mail',n:s.eventos.novidades}];
+  const site=`<section class="card"><h3>Visitas por dia</h3><p class="hint">Cada visita conta uma vez, mesmo que a pessoa abra várias páginas. A contagem não usa cookies nem identifica quem visitou.</p>
+      ${s.visitas?`<div class="chart-box" style="height:260px"><canvas id="mVis" role="img" aria-label="Visitas por dia: ${nfmt(s.visitas)} visitas em ${m.periodo.dias} dias"></canvas></div>`:emptyState('mouse-pointer-click','Ainda sem visitas registradas','A contagem começou quando esta versão do site foi publicada. Volte aqui em alguns dias.')}</section>
+    <section class="grid two">
+      <div class="card"><h3>Caminho até o pedido</h3><p class="hint">Quantas visitas viraram compra ou pedido de orçamento</p>${barList(funil,'Sem dados no período.')}</div>
+      <div class="card"><h3>Outras ações no site</h3><p class="hint">O que os visitantes fizeram além do pedido</p>${barList(acoes,'Nenhuma ação registrada no período.')}</div>
+    </section>
+    <section class="grid two">
+      <div class="card"><h3>De onde vêm as visitas</h3><p class="hint">Site ou aplicativo em que a pessoa estava antes de chegar</p>${barList(s.origens,'Sem dados no período.')}</div>
+      <div class="card"><h3>Páginas e aparelhos</h3><p class="hint">Páginas mais abertas</p>${barList(s.paginasVistas,'Sem dados no período.',k=>PAGE_NAMES[k]||k)}<p class="hint" style="margin-top:14px">Aparelho usado na visita</p>${barList(s.aparelhos,'Sem dados no período.')}</div>
+    </section>`;
+  const i28=ig.ultimos28dias;
+  const igCard=!ig.configurado?`<section class="card"><h3>Instagram</h3>${emptyState('instagram','Instagram não conectado','Cadastre o IG_TOKEN no servidor (veja o GUIA.md) para acompanhar seguidores e publicações.')}</section>`
+    :`<section class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><div><h3>Instagram${pf.usuario?' · @'+esc(pf.usuario):''}</h3><p class="hint">${ig.atualizadoEm?'Atualizado em '+dtime(ig.atualizadoEm):'Sem dados ainda'}</p></div>${ig.erro?'<span class="badge b-warn">Com problema</span>':'<span class="badge b-ok">Conectado</span>'}</div>
+      ${ig.erro?`<div class="banner"><i data-lucide="alert-triangle"></i><div>${esc(ig.erro)}${ig.desatualizado?' Os números abaixo são os últimos que o painel conseguiu ler.':''}</div></div>`:''}
+      ${pf.seguidores!=null||pf.publicacoes!=null?`<div class="mstats"><div><small>Seguidores</small><b class="tnum">${nfmt(pf.seguidores)}</b></div><div><small>Seguindo</small><b class="tnum">${nfmt(pf.seguindo)}</b></div><div><small>Publicações</small><b class="tnum">${nfmt(pf.publicacoes)}</b></div>
+        ${i28?`<div><small>Contas alcançadas (28 dias)</small><b class="tnum">${nfmt(i28.alcance)}</b></div><div><small>Visualizações (28 dias)</small><b class="tnum">${nfmt(i28.visualizacoes)}</b></div><div><small>Interações (28 dias)</small><b class="tnum">${nfmt(i28.interacoes)}</b></div>`:''}</div>`:''}
+      ${!i28&&!ig.erro?'<p class="hint">Alcance e visualizações não aparecem porque o token do Instagram não tem a permissão de estatísticas (insights). Seguidores, curtidas e comentários funcionam sem ela.</p>':''}
+      ${fol.length>1?`<h4 class="msub">Seguidores por dia</h4><div class="chart-box" style="height:220px"><canvas id="mFol" role="img" aria-label="Seguidores por dia, de ${nfmt(fol[0].seguidores)} para ${nfmt(fol[fol.length-1].seguidores)}"></canvas></div>`:pf.seguidores!=null?'<p class="hint">O painel guarda o número de seguidores uma vez por dia. O gráfico de evolução aparece a partir de amanhã.</p>':''}
+      ${(ig.posts||[]).length?`<h4 class="msub">Últimas publicações</h4><div class="table-wrap"><table class="mtable"><thead><tr><th>Data</th><th>Tipo</th><th>Legenda</th><th class="num">Curtidas</th><th class="num">Comentários</th><th></th></tr></thead><tbody>${ig.posts.map(p=>`<tr><td>${p.data?dshort(p.data):''}</td><td>${esc(p.tipo)}</td><td class="mcap">${esc(p.legenda||'(sem legenda)')}</td><td class="num tnum">${nfmt(p.curtidas)}</td><td class="num tnum">${nfmt(p.comentarios)}</td><td>${p.link?`<a class="linkish" href="${esc(safeUrl(p.link))}" target="_blank" rel="noopener noreferrer">Abrir</a>`:''}</td></tr>`).join('')}</tbody></table></div>`:''}
+    </section>`;
+  const atend=`<section class="card"><h3>Atendimento pelo WhatsApp e Instagram</h3><p class="hint">Mensagens que passaram pelo servidor da ESRO${a.whatsappLigado?'':'. O WhatsApp ainda não está conectado, então só o Direct do Instagram aparece'}.</p>
+      <div class="mstats"><div><small>Conversas</small><b class="tnum">${nfmt(a.conversas)}</b></div><div><small>Não lidas agora</small><b class="tnum">${nfmt(a.naoLidas)}</b></div><div><small>Recebidas no período</small><b class="tnum">${nfmt(rec)}</b></div><div><small>Enviadas no período</small><b class="tnum">${nfmt(env)}</b></div><div><small>Tempo até responder</small><b class="tnum">${mins==null?'—':mins<60?mins+' min':Math.round(mins/60)+' h'}</b></div></div>
+      ${rec+env?`<div class="chart-box" style="height:240px"><canvas id="mMsg" role="img" aria-label="Mensagens por dia: ${nfmt(rec)} recebidas e ${nfmt(env)} enviadas"></canvas></div><div class="legend"><span><span class="dot" style="background:var(--c-in)"></span>Recebidas</span><span><span class="dot" style="background:var(--c-out)"></span>Enviadas</span></div>`:'<p class="hint">Nenhuma mensagem no período.</p>'}
+    </section>`;
+  return head(tools)+kpis+site+igCard+(redes.length?outras:'')+atend;
+}
+function drawMonitor(){
+  const m=MON.data; if(!window.Chart||!m) return; const text2=tok('--text2'), line=tok('--line'), cIn=tok('--c-in'), cOut=tok('--c-out'), card=tok('--card');
+  const xs={grid:{display:false},ticks:{color:text2,maxRotation:0,autoSkip:true,maxTicksLimit:10,font:{family:'Nunito',size:11}}};
+  const ys={beginAtZero:true,grid:{color:line},border:{display:false},ticks:{color:text2,precision:0,callback:v=>nfmt(v)}};
+  const bar=(label,color,data)=>({label,data,backgroundColor:color,borderRadius:4,maxBarThickness:26,categoryPercentage:.78,barPercentage:.9});
+  if($('#mVis')) charts.push(new Chart($('#mVis'),{type:'bar',data:{labels:m.site.porDia.map(d=>dlabel(d.dia)),datasets:[bar('Visitas',cIn,m.site.porDia.map(d=>d.visitas))]},
+    options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{afterLabel:c=>`${nfmt(m.site.porDia[c.dataIndex].paginas)} página(s) aberta(s)`}}},scales:{x:xs,y:ys}}}));
+  const fol=m.instagram&&m.instagram.seguidoresPorDia||[];
+  if($('#mFol')) charts.push(new Chart($('#mFol'),{type:'line',data:{labels:fol.map(d=>dlabel(d.dia)),datasets:[{label:'Seguidores',data:fol.map(d=>d.seguidores),borderColor:cIn,backgroundColor:cIn,borderWidth:2,tension:.25,pointRadius:fol.length>40?0:4,pointHoverRadius:6,pointBorderColor:card,pointBorderWidth:2}]},
+    options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false}},scales:{x:xs,y:{...ys,beginAtZero:false}}}}));
+  if($('#mMsg')) charts.push(new Chart($('#mMsg'),{type:'bar',data:{labels:m.atendimento.porDia.map(d=>dlabel(d.dia)),datasets:[bar('Recebidas',cIn,m.atendimento.porDia.map(d=>d.whatsapp.recebidas+d.instagram.recebidas)),bar('Enviadas',cOut,m.atendimento.porDia.map(d=>d.whatsapp.enviadas+d.instagram.enviadas))]},
+    options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false}},scales:{x:xs,y:ys}}}));
+}
+
+/* ---------- Níveis de acesso (painel do site) ---------- */
+// No painel do site, antes do login ninguém vê menu nenhum; no claude.ai (sem níveis) tudo fica liberado.
+const PODE=()=>window.ESRO_ME?window.ESRO_ME.pode:(STANDALONE?{ler:[],alterar:[]}:null);
+const EU=()=>(window.ESRO_ME&&window.ESRO_ME.usuario)||null;
+const reads=c=>{ const p=PODE(); return !p||p.ler==='*'||p.ler.includes(c); };
+const writes=c=>{ const p=PODE(); return !p||p.alterar==='*'||p.alterar.includes(c); };
+const isAdmin=()=>{ const p=PODE(); return !p||!!p.usuarios; };
+const VIEW_OK={orders:()=>reads('orders'),clients:()=>reads('clients'),catalog:()=>reads('catalog'),loja:()=>STANDALONE&&(!PODE()||!!PODE().loja),stock:()=>reads('stock'),cash:()=>reads('cash'),
+  inbox:()=>!PODE()||!!PODE().mensagens,arts:()=>!PODE()||!!PODE().arquivos,reports:()=>!PODE()||!!PODE().monitor,monitor:()=>!PODE()||!!PODE().monitor};
+const canView=v=>!VIEW_OK[v]||VIEW_OK[v]();
+const apiErr=(e,fallback)=>e&&e.message&&e.code!=='unavailable'&&e.message!==e.code?e.message:fallback;
+
+/* ---------- Loja online: produtos, cupons, entrega e integrações ---------- */
+const LJ={status:null,loading:false,err:'',form:null,busy:false};
+let PE=null;   // produto em edição: { id, imgs:[...], old:[...] }
+const prodImg=u=>{ const s=String(u||''), m=/^asset:([a-f0-9]{24})$/.exec(s); return m?'/_blob/'+m[1]:/^\/assets\/[\w\-./]+$/.test(s)&&!s.includes('..')?s:''; };
+const promoOn=p=>p.mode==='compra'&&p.promo&&+p.promo.price>0&&+p.promo.price<+p.price&&(!p.promo.until||p.promo.until>=today());
+const catTwin=p=>p.mode==='compra'?null:catItems().find(i=>String(i.name).trim().toLowerCase()===String(p.name||'').trim().toLowerCase())||null;
+const prodPrice=p=>catTwin(p)?esc(priceTxt(catTwin(p))):p.mode==='compra'?(promoOn(p)?`${esc(fmt(p.promo.price))} <s style="color:var(--text2);font-weight:400">${esc(fmt(p.price))}</s>`:esc(fmt(p.price))):esc(priceTxt({min:+p.min||0,max:+p.max||0}));
+const slugOf=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,70)||'produto';
+const numBR=s=>{ const n=parseFloat(String(s??'').replace(/\s|R\$/g,'').replace(',','.')); return isNaN(n)?0:n; };
+const opsText=ops=>(ops||[]).map(o=>o.n+(+o.add>0?' +'+String(o.add).replace('.',','):'')).join('; ');
+const opsParse=t=>String(t||'').split(/[;\n]/).map(x=>x.trim()).filter(Boolean).map(x=>{ const m=/^(.*?)\s*\+\s*(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)$/.exec(x); return m?{n:m[1].trim(),add:numBR(m[2])}:{n:x,add:0}; }).filter(o=>o.n).slice(0,20);
+const ordOf=p=>p.ord==null||p.ord===''||isNaN(+p.ord)?999:+p.ord;
+const prodList=()=>[...D.products].sort((a,b)=>ordOf(a)-ordOf(b)||String(a.name).localeCompare(String(b.name),'pt-BR'));
+const siteBase=()=>location.origin;
+async function loadLojaStatus(){ if(!window.ESRO_API||LJ.loading) return; LJ.loading=true; LJ.err='';
+  try{ LJ.status=await window.ESRO_API('GET','/loja/status'); }catch(e){ LJ.err=apiErr(e,'Não foi possível ler a situação das integrações agora.'); }
+  LJ.loading=false; if(S.view==='loja'&&S.lojaTab==='integr') render(); }
+const lojaDefaults=()=>({cepOrigem:'',retirada:{on:false,texto:''},faixas:[],gratisAcima:0,prazoProducao:0,combinar:true,emailPago:true,emailEnviado:true,...JSON.parse(JSON.stringify(D.loja||{}))});
+function readLojaForm(){ const f=LJ.form; if(!f||!$('#lj-cepOrigem')) return; const v=k=>$('#lj-'+k).value.trim(), c=k=>$('#lj-'+k).checked;
+  f.cepOrigem=v('cepOrigem'); f.retirada={on:c('retOn'),texto:v('retTexto')}; f.gratisAcima=numBR(v('gratis')); f.prazoProducao=Math.max(0,Math.floor(numBR(v('prazo')))); f.combinar=c('combinar'); f.emailPago=c('emailPago'); f.emailEnviado=c('emailEnviado');
+  f.faixas=(f.faixas||[]).map((x,i)=>$('#lj-f'+i+'-nome')?{nome:$('#lj-f'+i+'-nome').value.trim(),de:$('#lj-f'+i+'-de').value.trim(),ate:$('#lj-f'+i+'-ate').value.trim(),valor:numBR($('#lj-f'+i+'-valor').value),prazo:$('#lj-f'+i+'-prazo').value.trim()}:x); }
+const copyLine=(label,value)=>`<label class="fl">${label}<span class="copyline"><input class="inp" readonly value="${esc(value)}"><button class="btn sm" data-copy="${esc(value)}"><i data-lucide="copy"></i>Copiar</button></span></label>`;
+
+function vLoja(){
+  const tabs=[['produtos','Produtos'],['cupons','Cupons'],['entrega','Entrega e avisos'],['integr','Integrações']]; const w=writes('products');
+  const head=`<div class="page-head"><div><h2>Loja online</h2><p>Produtos com foto e compra direta, cupons, frete e as integrações do site.</p></div>
+    <div class="toolbar"><div class="seg">${tabs.map(([k,l])=>`<button class="${S.lojaTab===k?'on':''}" data-ljtab="${k}">${l}</button>`).join('')}</div></div></div>`;
+  if(S.lojaTab==='cupons'){ const list=[...D.coupons].sort((a,b)=>String(a.code).localeCompare(String(b.code)));
+    const desc=c=>c.kind==='frete'?'Frete grátis':c.kind==='valor'?`${fmt(c.value)} de desconto`:`${+c.value||0}% de desconto`;
+    const val=c=>[c.from?'de '+dfull(c.from):'',c.to?'até '+dfull(c.to):'',+c.min>0?'compra mínima '+fmt(c.min):''].filter(Boolean).join(' · ')||'sem prazo nem valor mínimo';
+    return head+`<section class="card"><div class="card-top"><div><h3>Cupons de desconto</h3><p class="hint">O cliente digita o código na finalização da compra. O site confere validade, valor mínimo e limite de usos.</p></div>${w?'<button class="btn primary" data-cpnew><i data-lucide="plus"></i>Novo cupom</button>':''}</div>
+      ${list.length?`<div class="list">${list.map(c=>`<div class="row prow"><span class="pthumb"><i data-lucide="ticket-percent"></i></span><div class="grow"><b>${esc(c.code)}</b><small>${esc(desc(c))} · ${esc(val(c))}</small></div>
+        <span class="mini"><b>${+c.used||0}</b>${+c.max>0?' de '+(+c.max):''} uso(s)</span>${c.to&&c.to<today()?'<span class="badge b-neutral">Vencido</span>':''}
+        <button class="switch" role="switch" aria-checked="${c.on!==false}" data-cpon="${esc(c.id)}" ${w?'':'disabled'}><span class="tr"></span>${c.on!==false?'Ativo':'Desligado'}</button>${w?`<button class="btn sm" data-cpedit="${esc(c.id)}"><i data-lucide="pencil"></i>Editar</button>`:''}</div>`).join('')}</div>`
+      :emptyState('ticket-percent','Nenhum cupom ainda','Crie um cupom de boas-vindas ou de frete grátis para divulgar no Instagram.')}</section>`; }
+  if(S.lojaTab==='entrega'){ if(!LJ.form) LJ.form=lojaDefaults(); const f=LJ.form, dis=writes('settings')?'':'disabled';
+    return head+`<form id="ljForm" class="grid" style="gap:16px">
+    <section class="card"><h3>Entrega</h3><p class="hint">O site mostra ao cliente as opções que valem para o CEP dele. Produtos digitais não têm frete.</p><div class="form" style="margin-top:12px">
+      <label>CEP de onde saem os pedidos<input class="inp" id="lj-cepOrigem" inputmode="numeric" maxlength="9" placeholder="00000-000" value="${esc(f.cepOrigem||'')}" ${dis}><small class="hint">Usado para calcular o frete das transportadoras.</small></label>
+      <label>Prazo de produção (dias)<input class="inp tnum" id="lj-prazo" type="number" min="0" step="1" value="${esc(f.prazoProducao||'')}" placeholder="0" ${dis}><small class="hint">Somado ao prazo da transportadora.</small></label>
+      <label>Frete grátis a partir de (R$)<input class="inp tnum" id="lj-gratis" type="number" min="0" step="0.01" value="${esc(f.gratisAcima||'')}" placeholder="Deixe vazio para não oferecer" ${dis}><small class="hint">Vale para a opção de entrega mais barata.</small></label>
+      <label class="chk" style="align-self:center"><input type="checkbox" id="lj-combinar" ${f.combinar!==false?'checked':''} ${dis}>Quando não houver opção para o CEP, oferecer “entrega a combinar”</label>
+      <div class="fieldset full"><h4>Retirada</h4><label class="chk"><input type="checkbox" id="lj-retOn" ${f.retirada&&f.retirada.on?'checked':''} ${dis}>Oferecer retirada com a ESRO (sem frete)</label>
+        <label class="fl">Texto que o cliente vê<input class="inp" id="lj-retTexto" maxlength="120" value="${esc(f.retirada&&f.retirada.texto||'')}" placeholder="Ex.: Zona Leste de São Paulo, com hora marcada" ${dis}></label></div>
+      <div class="fieldset full"><h4>Tabela de entrega por faixa de CEP</h4><p class="hint">Para entregas próprias ou por motoboy. Ex.: “Entrega ESRO (São Paulo capital)”, de 01000-000 até 05999-999, R$ 15,00.</p>
+        ${(f.faixas||[]).map((x,i)=>`<div class="faixa"><label class="fl">Nome<input class="inp" id="lj-f${i}-nome" maxlength="60" value="${esc(x.nome||'')}" ${dis}></label><label class="fl">CEP inicial<input class="inp" id="lj-f${i}-de" inputmode="numeric" maxlength="9" value="${esc(x.de||'')}" placeholder="01000-000" ${dis}></label><label class="fl">CEP final<input class="inp" id="lj-f${i}-ate" inputmode="numeric" maxlength="9" value="${esc(x.ate||'')}" placeholder="05999-999" ${dis}></label>
+          <label class="fl">Valor (R$)<input class="inp tnum" id="lj-f${i}-valor" type="number" min="0" step="0.01" value="${esc(x.valor??'')}" ${dis}></label><label class="fl">Prazo<input class="inp" id="lj-f${i}-prazo" maxlength="60" value="${esc(x.prazo||'')}" placeholder="até 3 dias úteis" ${dis}></label>${dis?'':`<button class="del" data-ljfdel="${i}" aria-label="Remover faixa"><i data-lucide="trash-2"></i></button>`}</div>`).join('')||'<p class="hint">Nenhuma faixa cadastrada.</p>'}
+        ${dis?'':'<button class="btn sm" style="align-self:flex-start" data-ljfadd><i data-lucide="plus"></i>Adicionar faixa</button>'}</div>
+    </div></section>
+    <section class="card"><h3>Avisos por e-mail ao cliente</h3><p class="hint">Funcionam quando o envio de e-mails está ligado (aba Integrações) e o cliente informou o e-mail. O aviso de “pedido recebido” é sempre enviado nas compras pelo site.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px"><label class="chk"><input type="checkbox" id="lj-emailPago" ${f.emailPago!==false?'checked':''} ${dis}>Avisar quando o pagamento for confirmado</label>
+      <label class="chk"><input type="checkbox" id="lj-emailEnviado" ${f.emailEnviado!==false?'checked':''} ${dis}>Avisar quando o pedido for marcado como “Enviado” (com o código de rastreio, se houver)</label></div></section>
+    ${dis?'':'<div><button class="btn primary" data-ljsave><i data-lucide="check"></i>Salvar entrega e avisos</button></div>'}</form>`; }
+  if(S.lojaTab==='integr'){ if(!LJ.status&&!LJ.loading&&!LJ.err) setTimeout(loadLojaStatus,0);
+    if(!LJ.status) return head+`<div class="card">${LJ.err?emptyState('wifi-off','Não foi possível carregar',esc(LJ.err),'<button class="btn" data-ljrefresh><i data-lucide="refresh-cw"></i>Tentar de novo</button>'):'<div class="loading">Conferindo as integrações…</div>'}</div>`;
+    const st=LJ.status, on=b=>b?'<span class="badge b-ok">Ligado</span>':'<span class="badge b-warn">Não configurado</span>';
+    const card=(ic,bg,fg,name,sub,badge,body)=>`<div class="card"><div class="int-head"><span class="int-ico" style="background:${bg};color:${fg}"><i data-lucide="${ic}"></i></span><div class="grow"><b>${name}</b><small>${sub}</small></div>${badge}</div><div class="int-body">${body}</div></div>`;
+    return head+`${st.publicUrl?'':`<div class="banner"><i data-lucide="alert-triangle"></i><div><b>Cadastre o endereço do site no Render.</b> Crie a variável <b>PUBLIC_URL</b> com o valor <b>https://www.esro-papelaria.com.br</b>, para os links dos e-mails e o retorno do pagamento usarem sempre o endereço certo.</div></div>`}
+    <section class="grid integr">
+      ${card('mail','var(--site-soft)','var(--site)','E-mails automáticos',st.email.ligado?`${esc(st.email.provedor==='brevo'?'Brevo':'Resend')} · remetente ${esc(st.email.remetente)}`:'Pedido recebido, pagamento confirmado, pedido enviado e senha nova',on(st.email.ligado),
+        st.email.ligado?`<p class="hint">Os avisos para a loja chegam em <b>${esc(st.email.avisos)}</b>. Envie um teste para conferir se chega (olhe também a caixa de spam).</p><button class="btn sm" style="align-self:flex-start" data-ljmail ${LJ.busy?'disabled':''}><i data-lucide="send"></i>${LJ.busy?'Enviando…':'Enviar e-mail de teste'}</button>`
+        :'<p class="hint">Crie uma conta gratuita na <b>Brevo</b> (ou na Resend), confirme o seu e-mail de remetente e cadastre no Render as variáveis <b>EMAIL_PROVIDER</b>, <b>EMAIL_API_KEY</b>, <b>EMAIL_FROM</b> e <b>EMAIL_OWNER</b>. O passo a passo está no guia, seção “E-mails automáticos”.</p>')}
+      ${card('credit-card','var(--sage-soft)','var(--ok)','Pagamento online','Mercado Pago: cartão, PIX e boleto com confirmação automática',on(st.mercadopago.ligado),
+        st.mercadopago.ligado?`<p class="hint">No painel do Mercado Pago, em <b>Suas integrações → Webhooks</b>, cadastre este endereço e marque o evento <b>Pagamentos</b>:</p>${copyLine('Endereço para os avisos de pagamento',st.mercadopago.aviso)}<p class="hint">${st.mercadopago.assinatura?'A assinatura dos avisos está sendo conferida.':'Recomendado: cadastre também a <b>MP_WEBHOOK_SECRET</b> (assinatura secreta do webhook) no Render. Mesmo sem ela, o site sempre confere o pagamento direto no Mercado Pago.'}</p>`
+        :'<p class="hint">Sem o Mercado Pago, o site vende com <b>PIX</b> (QR Code e copia e cola) e você confirma o recebimento no pedido. Para ligar cartão e confirmação automática, cadastre <b>MP_ACCESS_TOKEN</b> no Render. Veja o guia, seção “Pagamento online”.</p>')}
+      ${card('truck','var(--primary-soft)','var(--primary)','Frete por transportadora','Melhor Envio: Correios e transportadoras, com valor e prazo pelo CEP',st.melhorenvio.ligado?(st.melhorenvio.teste?'<span class="badge b-warn">Modo de teste</span>':'<span class="badge b-ok">Ligado</span>'):on(false),
+        st.melhorenvio.ligado?`<p class="hint">${st.melhorenvio.teste?'Está no ambiente de testes (ME_SANDBOX=1): os valores são simulados. Para valer, use o token de produção e apague a variável ME_SANDBOX.':'O frete é calculado com o peso e as medidas de cada produto e o CEP de origem da aba “Entrega e avisos”.'}</p>`
+        :'<p class="hint">Sem o Melhor Envio, o site usa a <b>tabela por faixa de CEP</b>, a <b>retirada</b> e a <b>entrega a combinar</b> da aba “Entrega e avisos”. Para ligar, cadastre <b>ME_TOKEN</b> no Render. Veja o guia, seção “Frete”.</p>')}
+      ${card('share-2','var(--ig-soft)','var(--ig)','Canais de venda','Instagram e Facebook Shop, Google Merchant Center','<span class="badge b-ok">Pronto para usar</span>',
+        `<p class="hint">Esta lista traz os produtos de <b>compra direta</b> que têm <b>foto</b> (JPG, PNG ou WebP). Cadastre o endereço no Gerenciador de Comércio da Meta ou no Google Merchant Center como “feed de dados programado”.</p>${copyLine('Lista de produtos (feed)',st.feed)}${copyLine('Mapa do site para o Google',st.sitemap)}`)}
+    </section>`; }
+  const list=prodList(), buy=list.filter(p=>p.mode==='compra').length, onN=list.filter(p=>p.on!==false).length;
+  return head+`<section class="card"><div class="card-top"><div><h3>Produtos da vitrine</h3><p class="hint">${onN} de ${list.length} no site · ${buy} com compra direta. Produto “sob orçamento” entra no pedido de orçamento; com preço fixo, o cliente compra e paga pelo site.</p></div>${w?'<button class="btn primary" data-pnew><i data-lucide="plus"></i>Novo produto</button>':''}</div>
+    ${list.length?`<div class="list">${list.map(p=>{ const img=prodImg((p.imgs||[])[0]); const st=p.stock==null?'':+p.stock<=0?'<span class="badge b-primary">Esgotado</span>':`<span class="mini"><b>${+p.stock}</b> em estoque</span>`;
+      return `<div class="row prow ${p.on===false?'off':''}"><span class="pthumb">${img?`<img src="${esc(img)}" alt="">`:'<i data-lucide="image"></i>'}</span><div class="grow"><b>${esc(p.name)}</b><small>${esc(p.cat||'Sem categoria')} · ${p.mode==='compra'?'Compra direta':'Sob orçamento'}${p.digital?' · digital':''}${p.vitrine===false?' · fora da página inicial':''}${catTwin(p)&&catTwin(p).on===false?' · oculto no Catálogo':''}</small></div>
+        ${st}<b class="tnum pprice">${prodPrice(p)}</b><button class="switch" role="switch" aria-checked="${p.on!==false}" data-pon="${esc(p.id)}" ${w?'':'disabled'}><span class="tr"></span>${p.on!==false?'No site':'Oculto'}</button>
+        ${w?`<button class="btn sm" data-pedit="${esc(p.id)}"><i data-lucide="pencil"></i>Editar</button>`:''}</div>`; }).join('')}</div>`
+    :emptyState('store','Nenhum produto ainda','Cadastre o primeiro produto com foto e preço para ele aparecer na vitrine do site.')}</section>`;
+}
+
+function prodImgsHtml(){ return (PE.imgs.map((u,i)=>`<span class="pimg">${prodImg(u)?`<img src="${esc(prodImg(u))}" alt="Foto ${i+1}">`:''}<button type="button" data-pimgdel="${i}" aria-label="Remover foto ${i+1}"><i data-lucide="x"></i></button></span>`).join('')||'<small class="hint">Nenhuma foto ainda.</small>'); }
+function openProduct(id){
+  const p=id?D.products.find(x=>x.id===id):null; if(id&&!p) return;
+  const v=p||{name:'',cat:'',desc:'',mode:'compra',price:'',min:'',max:'',imgs:[],vars:[],pers:'',stock:null,digital:false,peso:300,c:25,l:18,a:3,vitrine:true,on:true,ord:D.products.length+1};
+  PE={id:id||'',imgs:[...(v.imgs||[])],old:[...(v.imgs||[])]}; delArm=null;
+  const vr=i=>(v.vars||[])[i]||{nome:'',ops:[]};
+  $('#modalRoot').innerHTML=`<div class="overlay" data-close><div class="modal" role="dialog" aria-modal="true" aria-labelledby="pt">
+    <div class="modal-head"><div><h3 id="pt">${p?esc(p.name):'Novo produto'}</h3>${p&&p.slug?`<small><a class="linkish" href="/produto/${esc(p.slug)}" target="_blank" rel="noopener">Ver no site</a></small>`:''}</div><button class="close" data-x aria-label="Fechar"><i data-lucide="x"></i></button></div>
+    <form id="pForm" class="modal-body form" style="display:grid">
+      <label class="full"><span>Nome do produto <span class="req">*</span></span><input class="inp" id="pr-name" maxlength="120" required value="${esc(v.name)}"></label>
+      <label>Categoria (etiqueta)<input class="inp" id="pr-cat" maxlength="40" value="${esc(v.cat||'')}" placeholder="Ex.: Organização" list="dl-pcat"><datalist id="dl-pcat">${[...new Set(D.products.map(x=>x.cat).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
+      <label>Como é vendido<select class="inp" id="pr-mode"><option value="compra" ${v.mode==='compra'?'selected':''}>Compra direta (preço fixo)</option><option value="orcamento" ${v.mode!=='compra'?'selected':''}>Sob orçamento</option></select></label>
+      <label class="full">Descrição<textarea class="inp" id="pr-desc" rows="3" maxlength="1200" placeholder="O que é, tamanho, material, o que pode ser personalizado…">${esc(v.desc||'')}</textarea></label>
+      <div class="fieldset full" id="pr-buy" ${v.mode==='compra'?'':'hidden'}><h4>Preço</h4><div class="form">
+        <label><span>Preço (R$) <span class="req">*</span></span><input class="inp tnum" id="pr-price" type="number" min="0" step="0.01" value="${esc(v.price||'')}"></label>
+        <label>Preço promocional (R$)<input class="inp tnum" id="pr-promo" type="number" min="0" step="0.01" value="${esc(v.promo&&v.promo.price||'')}" placeholder="Vazio = sem promoção"></label>
+        <label>Promoção vale até<input class="inp" id="pr-until" type="date" value="${esc(v.promo&&v.promo.until||'')}"></label></div></div>
+      <div class="fieldset full" id="pr-quote" ${v.mode==='compra'?'hidden':''}><h4>Faixa de preço do orçamento</h4><div class="form">
+        <label>A partir de (R$)<input class="inp tnum" id="pr-min" type="number" min="0" step="0.01" value="${esc(v.min||'')}"></label><label>Até (R$)<input class="inp tnum" id="pr-max" type="number" min="0" step="0.01" value="${esc(v.max||'')}"></label></div><p class="hint">${p&&catTwin(p)?`Este produto tem o mesmo nome de um item do <b>Catálogo & Serviços</b>. Enquanto for assim, vale a faixa de preço de lá (${esc(priceTxt(catTwin(p)))}) e, se o item for ocultado no Catálogo, o produto também sai do site.`:'Deixe os dois vazios para mostrar “Sob consulta”.'}</p></div>
+      <div class="fieldset full"><h4>Fotos</h4><div class="pimgs" id="pr-imgs">${prodImgsHtml()}</div>
+        ${ASSETS?`<label class="btn sm" style="align-self:flex-start;cursor:pointer"><i data-lucide="image-plus"></i>Enviar fotos<input type="file" id="pr-file" accept="image/png,image/jpeg,image/webp" multiple hidden></label>`:''}
+        <p class="hint">Até 6 fotos em JPG, PNG ou WebP. A primeira é a principal. Formato ideal: deitada, 5 por 4 (ex.: 1500 × 1200). Fotos grandes são reduzidas automaticamente.</p></div>
+      <div class="fieldset full"><h4>Opções que o cliente escolhe (variações)</h4><p class="hint">Ex.: grupo “Tamanho”, opções “A5; A4 +15”. Separe as opções com ponto e vírgula; o “+15” soma R$ 15,00 ao preço.</p>
+        ${[0,1,2].map(i=>`<div class="form"><label>Grupo ${i+1}<input class="inp" id="pr-v${i}n" maxlength="40" value="${esc(vr(i).nome)}" placeholder="Ex.: ${['Tamanho','Miolo','Cor da capa'][i]}"></label><label>Opções<input class="inp" id="pr-v${i}o" value="${esc(opsText(vr(i).ops))}" placeholder="Ex.: ${['A5; A4 +15','Pautado; Pontilhado; Sem pauta','Rosa; Verde; Terracota'][i]}"></label></div>`).join('')}</div>
+      <label class="full">Personalização: pergunta para o cliente<input class="inp" id="pr-pers" maxlength="60" value="${esc(v.pers||'')}" placeholder="Ex.: Nome para a capa (deixe vazio se o produto não é personalizado)"></label>
+      <div class="fieldset full"><h4>Estoque e entrega</h4>
+        <label class="chk"><input type="checkbox" id="pr-stockOn" ${v.stock!=null?'checked':''}>Controlar estoque (o site para de vender quando zerar)</label>
+        <div class="form"><label>Quantidade em estoque<input class="inp tnum" id="pr-stock" type="number" min="0" step="1" value="${esc(v.stock??'')}" placeholder="Feito sob encomenda: deixe desmarcado"></label>
+          <label class="chk" style="align-self:end;padding-bottom:10px"><input type="checkbox" id="pr-digital" ${v.digital?'checked':''}>Produto digital (sem frete)</label></div>
+        <div class="form" style="grid-template-columns:repeat(4,minmax(0,1fr))"><label>Peso (g)<input class="inp tnum" id="pr-peso" type="number" min="1" step="1" value="${esc(v.peso??300)}"></label><label>Compr. (cm)<input class="inp tnum" id="pr-c" type="number" min="1" step="1" value="${esc(v.c??25)}"></label><label>Largura (cm)<input class="inp tnum" id="pr-l" type="number" min="1" step="1" value="${esc(v.l??18)}"></label><label>Altura (cm)<input class="inp tnum" id="pr-a" type="number" min="1" step="1" value="${esc(v.a??3)}"></label></div>
+        <p class="hint">Peso e medidas do pacote já embalado: são usados no cálculo do frete pela transportadora.</p></div>
+      <label class="chk"><input type="checkbox" id="pr-on" ${v.on!==false?'checked':''}>Ativo no site</label>
+      <label class="chk"><input type="checkbox" id="pr-vitrine" ${v.vitrine!==false?'checked':''}>Mostrar na página inicial</label>
+      <label>Ordem na vitrine<input class="inp tnum" id="pr-ord" type="number" min="0" step="1" value="${esc(v.ord??'')}"></label>
+    </form>
+    <div class="modal-foot">${p?`<button class="btn danger" data-pdel="${esc(p.id)}" style="margin-right:auto"><i data-lucide="trash-2"></i>Excluir</button>`:''}<button class="btn" data-x>Cancelar</button><button class="btn primary" data-psave="${p?esc(p.id):''}"><i data-lucide="check"></i>${p?'Salvar alterações':'Cadastrar produto'}</button></div>
+  </div></div>`;
+  icons(); if(!p) $('#pr-name').focus();
+}
+// Reduz fotos grandes antes de enviar (lado maior de até 1600 px), para a página abrir rápido e não encher o armazenamento.
+async function shrinkImage(file){
+  try{ const bmp=await createImageBitmap(file); const k=Math.min(1,1600/Math.max(bmp.width,bmp.height)); if(k===1&&file.size<600*1024) return file;
+    const c=document.createElement('canvas'); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(bmp,0,0,c.width,c.height);
+    const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.86)); if(!blob||blob.size>=file.size) return file;
+    return new File([blob],file.name.replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'}); }catch(_){ return file; }
+}
+async function productPhotos(files){
+  if(!PE||!ASSETS) return; let n=0;
+  for(const f of files){ if(PE.imgs.length>=6){ toast('Cada produto pode ter até 6 fotos',1); break; } if(!/^image\/(png|jpeg|webp)$/.test(f.type)){ toast('Use fotos em JPG, PNG ou WebP',1); continue; }
+    try{ toast('Enviando foto…'); const small=await shrinkImage(f); const r=await ASSETS.upload(small,{type:small.type}); PE.imgs.push('asset:'+r.id); n++; }catch(e){ toast(errMsg(e),1); } }
+  const box=$('#pr-imgs'); if(box){ box.innerHTML=prodImgsHtml(); icons(); } if(n) toast(n===1?'Foto enviada. Salve o produto para publicar.':`${n} fotos enviadas. Salve o produto para publicar.`);
+}
+async function saveProduct(id){
+  const el=k=>$('#pr-'+k), v=k=>el(k).value.trim(), n=k=>numBR(el(k).value);
+  const name=v('name'), mode=v('mode')==='compra'?'compra':'orcamento';
+  if(!name){ el('name').focus(); toast('Informe o nome do produto',1); return; }
+  if(mode==='compra'&&!(n('price')>0)){ el('price').focus(); toast('Informe o preço do produto',1); return; }
+  if(mode==='compra'&&n('promo')>=n('price')&&n('promo')>0){ el('promo').focus(); toast('O preço promocional precisa ser menor que o preço',1); return; }
+  const vars=[]; for(const i of [0,1,2]){ const nome=v('v'+i+'n'), ops=opsParse(v('v'+i+'o')); if(!nome&&!ops.length) continue; if(!nome||!ops.length){ el('v'+i+(nome?'o':'n')).focus(); toast(nome?`Escreva as opções de “${nome}”`:'Dê um nome ao grupo de opções',1); return; } vars.push({nome,ops}); }
+  const now=new Date().toISOString();
+  const data={name,cat:v('cat'),desc:el('desc').value.trim(),mode,price:r2(n('price')),promo:mode==='compra'&&n('promo')>0?{price:r2(n('promo')),until:el('until').value||''}:null,min:r2(n('min')),max:r2(Math.max(n('max'),n('min'))),imgs:PE.imgs.slice(0,6),vars,pers:v('pers'),
+    stock:el('stockOn').checked?Math.max(0,Math.floor(n('stock'))):null,digital:el('digital').checked,peso:Math.max(1,Math.round(n('peso'))||300),c:Math.max(1,Math.round(n('c'))||25),l:Math.max(1,Math.round(n('l'))||18),a:Math.max(1,Math.round(n('a'))||3),
+    on:el('on').checked,vitrine:el('vitrine').checked,ord:Math.max(0,Math.round(n('ord')))||D.products.length+1,updatedAt:now};
+  const gone=PE.old.filter(u=>!PE.imgs.includes(u)&&/^asset:/.test(u));
+  let ok;
+  if(id) ok=await write(()=>DB.doc('products/'+id).update(data),'Produto atualizado');
+  else{ let slug=slugOf(name); const used=new Set(D.products.map(x=>x.slug)); for(let k=2;used.has(slug);k++) slug=slugOf(name).slice(0,66)+'-'+k;
+    const ref=DB.collection('products').doc(); ok=await write(()=>DB.doc('products/prd_'+ref.id).set({...data,slug,at:now}),'Produto cadastrado'); }
+  if(!ok) return;
+  if(ASSETS) for(const u of gone){ try{ await ASSETS.delete(u.slice(6)); }catch(_){} }
+  closeModal(); PE=null;
+}
+function openCoupon(id){
+  const c=id?D.coupons.find(x=>x.id===id):null; if(id&&!c) return; const v=c||{code:'',kind:'pct',value:'',min:'',from:'',to:'',max:'',on:true}; delArm=null;
+  $('#modalRoot').innerHTML=`<div class="overlay" data-close><div class="modal" role="dialog" aria-modal="true" aria-labelledby="ct" style="width:min(560px,100%)">
+    <div class="modal-head"><h3 id="ct">${c?'Cupom '+esc(c.code):'Novo cupom'}</h3><button class="close" data-x aria-label="Fechar"><i data-lucide="x"></i></button></div>
+    <form id="cpForm" class="modal-body form" style="display:grid">
+      <label><span>Código <span class="req">*</span></span><input class="inp" id="cp-code" maxlength="30" value="${esc(v.code)}" placeholder="Ex.: BEMVINDA10" style="text-transform:uppercase"></label>
+      <label>Tipo de desconto<select class="inp" id="cp-kind"><option value="pct" ${v.kind==='pct'?'selected':''}>Porcentagem (%)</option><option value="valor" ${v.kind==='valor'?'selected':''}>Valor fixo (R$)</option><option value="frete" ${v.kind==='frete'?'selected':''}>Frete grátis</option></select></label>
+      <label>Valor do desconto<input class="inp tnum" id="cp-value" type="number" min="0" step="0.01" value="${esc(v.value??'')}" placeholder="10 = 10% ou R$ 10,00"></label>
+      <label>Compra mínima (R$)<input class="inp tnum" id="cp-min" type="number" min="0" step="0.01" value="${esc(v.min||'')}" placeholder="Opcional"></label>
+      <label>Vale a partir de<input class="inp" id="cp-from" type="date" value="${esc(v.from||'')}"></label>
+      <label>Vale até<input class="inp" id="cp-to" type="date" value="${esc(v.to||'')}"></label>
+      <label>Limite de usos<input class="inp tnum" id="cp-max" type="number" min="0" step="1" value="${esc(v.max||'')}" placeholder="Vazio = sem limite"></label>
+      <label class="chk" style="align-self:end;padding-bottom:10px"><input type="checkbox" id="cp-on" ${v.on!==false?'checked':''}>Cupom ativo</label>
+      ${c?`<p class="hint full">Este cupom já foi usado ${+c.used||0} vez(es).</p>`:''}
+    </form>
+    <div class="modal-foot">${c?`<button class="btn danger" data-cpdel="${esc(c.id)}" style="margin-right:auto"><i data-lucide="trash-2"></i>Excluir</button>`:''}<button class="btn" data-x>Cancelar</button><button class="btn primary" data-cpsave="${c?esc(c.id):''}"><i data-lucide="check"></i>${c?'Salvar alterações':'Criar cupom'}</button></div></div></div>`;
+  icons(); if(!c) $('#cp-code').focus();
+}
+async function saveCoupon(id){
+  const g=k=>$('#cp-'+k), code=g('code').value.toUpperCase().replace(/[^A-Z0-9_-]/g,''), kind=g('kind').value, value=numBR(g('value').value);
+  if(code.length<3){ g('code').focus(); toast('O código precisa ter pelo menos 3 letras ou números',1); return; }
+  if(D.coupons.some(c=>c.id!==id&&String(c.code).toUpperCase()===code)){ g('code').focus(); toast('Já existe um cupom com este código',1); return; }
+  if(kind!=='frete'&&!(value>0)){ g('value').focus(); toast('Informe o valor do desconto',1); return; }
+  if(kind==='pct'&&value>100){ g('value').focus(); toast('A porcentagem vai até 100',1); return; }
+  if(g('from').value&&g('to').value&&g('to').value<g('from').value){ g('to').focus(); toast('A data final é anterior à inicial',1); return; }
+  const data={code,kind,value:kind==='frete'?0:r2(value),min:r2(numBR(g('min').value)),from:g('from').value||'',to:g('to').value||'',max:Math.max(0,Math.floor(numBR(g('max').value))),on:g('on').checked,updatedAt:new Date().toISOString()};
+  const ok=id?await write(()=>DB.doc('coupons/'+id).update(data),'Cupom atualizado'):await (async()=>{ const ref=DB.collection('coupons').doc(); return write(()=>ref.set({...data,used:0,at:data.updatedAt}),'Cupom criado'); })();
+  if(ok) closeModal();
+}
+async function saveLoja(){
+  readLojaForm(); const f=LJ.form, dg=s=>digits(s);
+  if(f.cepOrigem&&dg(f.cepOrigem).length!==8){ $('#lj-cepOrigem').focus(); toast('O CEP de origem precisa ter 8 números',1); return; }
+  for(let i=0;i<f.faixas.length;i++){ const x=f.faixas[i]; if(!x.nome||dg(x.de).length!==8||dg(x.ate).length!==8||dg(x.ate)<dg(x.de)){ $('#lj-f'+i+(x.nome?'-de':'-nome')).focus(); toast('Confira a faixa '+(i+1)+': nome, CEP inicial e CEP final (8 números cada)',1); return; } }
+  if(f.retirada.on&&!f.retirada.texto){ $('#lj-retTexto').focus(); toast('Escreva o texto da retirada (região e como combinar)',1); return; }
+  const full={...D.loja,...f,updatedAt:new Date().toISOString()};
+  if(await write(()=>DB.doc('settings/loja').set(full),'Entrega e avisos salvos')){ D.loja=full; LJ.form=null; logAct('Configurações da loja alteradas','Entrega, frete grátis ou avisos por e-mail'); render(); }
+}
+
+/* ---------- Usuários do painel ---------- */
+const US={list:null,niveis:[],err:'',loading:false};
+async function loadUsers(){ if(!window.ESRO_API||US.loading) return; US.loading=true; US.err='';
+  try{ const r=await window.ESRO_API('GET','/usuarios'); US.list=r.usuarios; US.niveis=r.niveis; }catch(e){ US.err=apiErr(e,'Não foi possível carregar os usuários agora.'); }
+  US.loading=false; drawUsers(); }
+function usersHtml(){
+  if(US.err) return `<p class="hint">${esc(US.err)}</p>`; if(!US.list) return '<p class="hint">Carregando…</p>';
+  const lv=cur=>US.niveis.map(n=>`<option value="${esc(n.id)}" ${n.id===cur?'selected':''}>${esc(n.nome)}</option>`).join(''), me=EU();
+  return `<div class="list">${US.list.map(u=>`<div class="row prow"><span class="avatar">${initials(u.nome)}</span><div class="grow"><b>${esc(u.nome)}</b><small>usuário: ${esc(u.usuario)} · ${u.ultimoAcesso?'último acesso em '+dtime(u.ultimoAcesso):'ainda não entrou'}</small></div>
+      <select class="inp" style="width:auto" data-ulevel="${esc(u.id)}" aria-label="Nível de ${esc(u.nome)}" ${me&&me.id===u.id?'disabled':''}>${lv(u.nivel)}</select>
+      <button class="switch" role="switch" aria-checked="${!!u.ativo}" data-uactive="${esc(u.id)}" ${me&&me.id===u.id?'disabled':''}><span class="tr"></span>${u.ativo?'Ativo':'Bloqueado'}</button>
+      <button class="btn sm" data-upw="${esc(u.id)}"><i data-lucide="key-round"></i>Nova senha</button>${me&&me.id===u.id?'':`<button class="del" data-udel="${esc(u.id)}" aria-label="Excluir ${esc(u.nome)}"><i data-lucide="trash-2"></i></button>`}</div>`).join('')||'<p class="hint">Só a senha principal está em uso. Crie um usuário para cada pessoa da equipe.</p>'}</div>
+    <div class="fieldset" style="margin-top:12px"><h4>Novo usuário</h4><div class="form">
+      <label>Nome da pessoa<input class="inp" id="us-name" maxlength="60" autocomplete="off"></label>
+      <label>Usuário (para entrar)<input class="inp" id="us-login" maxlength="30" autocomplete="off" placeholder="ex.: ana.atendimento" style="text-transform:lowercase"></label>
+      <label>Nível de acesso<select class="inp" id="us-role">${lv('atendimento')}</select></label>
+      <label>Senha inicial (mínimo de 10 caracteres)<input class="inp" id="us-pass" type="password" autocomplete="new-password" maxlength="128"></label></div>
+      <ul class="hint" style="margin:0;padding-left:18px">${US.niveis.map(n=>`<li><b>${esc(n.nome)}:</b> ${esc(n.descricao)}</li>`).join('')}</ul>
+      <button class="btn primary" style="align-self:flex-start" data-uadd><i data-lucide="user-plus"></i>Criar usuário</button></div>`;
+}
+function drawUsers(){ const b=$('#usersBox'); if(b){ b.innerHTML=usersHtml(); icons(); } }
+function usersCard(){ if(!US.list&&!US.loading&&!US.err) setTimeout(loadUsers,0);
+  return `<section class="card"><h3><i data-lucide="users" style="color:var(--primary);vertical-align:-3px"></i> Usuários do painel</h3><p class="hint">Cada pessoa entra com o próprio usuário e senha e vê só o que o nível dela permite. A senha principal (a que você usa hoje, sem usuário) continua sendo a da dona e dá acesso a tudo.</p><div id="usersBox" style="margin-top:10px">${usersHtml()}</div></section>`; }
+async function userAction(fn, ok){ try{ await fn(); if(ok) toast(ok); await loadUsers(); return true; }catch(e){ toast(apiErr(e,'Não foi possível concluir agora. Tente de novo.'),1); return false; } }
+function openUserPw(id){ const u=(US.list||[]).find(x=>x.id===id); if(!u) return;
+  $('#modalRoot').innerHTML=`<div class="overlay" data-close><div class="modal" role="dialog" aria-modal="true" aria-labelledby="ut" style="width:min(460px,100%)">
+    <div class="modal-head"><h3 id="ut">Nova senha para ${esc(u.nome)}</h3><button class="close" data-x aria-label="Fechar"><i data-lucide="x"></i></button></div>
+    <form class="modal-body form" style="display:grid;grid-template-columns:1fr"><label>Senha nova (mínimo de 10 caracteres)<input class="inp" id="up-pass" type="password" autocomplete="new-password" maxlength="128"></label>
+      <p class="hint">Ao salvar, ${esc(u.nome)} é desconectado(a) de todos os aparelhos e entra de novo com a senha nova.</p></form>
+    <div class="modal-foot"><button class="btn" data-x>Cancelar</button><button class="btn primary" data-upwsave="${esc(u.id)}"><i data-lucide="check"></i>Salvar senha</button></div></div></div>`;
+  icons(); $('#up-pass').focus(); }
+function myAccessCard(){ const me=EU(); if(!me) return '';
+  return `<section class="card"><h3><i data-lucide="user-round" style="color:var(--primary);vertical-align:-3px"></i> Meu acesso</h3><p class="hint">Você entrou como <b>${esc(me.nome)}</b>${me.dono?' (senha principal)':` (usuário ${esc(me.usuario)})`}, nível <b>${esc(me.nivelNome)}</b>.</p>
+    ${me.dono?'<p class="hint">A senha principal é trocada no Render, na variável <b>PAINEL_SENHA</b> (veja o guia). Trocar a senha desconecta todos os aparelhos e todos os usuários.</p>'
+    :`<div class="form" style="margin-top:10px"><label>Senha atual<input class="inp" id="mp-atual" type="password" autocomplete="current-password" maxlength="128"></label><label>Senha nova (mínimo de 10 caracteres)<input class="inp" id="mp-nova" type="password" autocomplete="new-password" maxlength="128"></label></div>
+      <button class="btn primary" style="margin-top:10px" data-mpsave><i data-lucide="check"></i>Trocar minha senha</button>`}</section>`; }
+
+async function lojaClick(el,d){
+  if(d.copy!==undefined&&d.copy!==''){ copy(d.copy); return true; }
+  if(d.ljtab){ readLojaForm(); S.lojaTab=d.ljtab; render(); return true; }
+  if(d.ljrefresh!==undefined){ LJ.status=null; LJ.err=''; render(); return true; }
+  if(d.ljmail!==undefined){ if(LJ.busy) return true; LJ.busy=true; render(); try{ const r=await window.ESRO_API('POST','/loja/email-teste',{}); toast('E-mail de teste enviado para '+r.para); }catch(e){ toast(apiErr(e,'Não foi possível enviar o e-mail de teste.'),1); } LJ.busy=false; render(); return true; }
+  if(d.ljfadd!==undefined){ readLojaForm(); LJ.form.faixas=[...(LJ.form.faixas||[]),{nome:'',de:'',ate:'',valor:0,prazo:''}].slice(0,40); render(); const i=LJ.form.faixas.length-1; $('#lj-f'+i+'-nome')?.focus(); return true; }
+  if(d.ljfdel!==undefined){ readLojaForm(); LJ.form.faixas=LJ.form.faixas.filter((_,i)=>i!==+d.ljfdel); render(); return true; }
+  if(d.ljsave!==undefined){ saveLoja(); return true; }
+  if(d.pnew!==undefined){ openProduct(null); return true; }
+  if(d.pedit){ openProduct(d.pedit); return true; }
+  if(d.psave!==undefined){ saveProduct(d.psave||null); return true; }
+  if(d.pon){ const p=D.products.find(x=>x.id===d.pon); if(p) write(()=>DB.doc('products/'+p.id).update({on:p.on===false}),p.on===false?`${p.name} voltou para o site`:`${p.name} oculto do site`); return true; }
+  if(d.pimgdel!==undefined){ if(PE){ PE.imgs.splice(+d.pimgdel,1); $('#pr-imgs').innerHTML=prodImgsHtml(); icons(); } return true; }
+  if(d.pdel){ if(delArm!==d.pdel){ delArm=d.pdel; el.innerHTML='<i data-lucide="alert-triangle"></i>Confirmar exclusão'; icons(); return true; }
+    const p=D.products.find(x=>x.id===d.pdel); if(await write(()=>DB.doc('products/'+d.pdel).delete(),`Produto ${p?.name||''} excluído`)){ logAct('Produto excluído',p?.name||''); closeModal(); if(ASSETS&&p) for(const u of (p.imgs||[])) if(/^asset:/.test(u)){ try{ await ASSETS.delete(u.slice(6)); }catch(_){} } } return true; }
+  if(d.cpnew!==undefined){ openCoupon(null); return true; }
+  if(d.cpedit){ openCoupon(d.cpedit); return true; }
+  if(d.cpsave!==undefined){ saveCoupon(d.cpsave||null); return true; }
+  if(d.cpon){ const c=D.coupons.find(x=>x.id===d.cpon); if(c) write(()=>DB.doc('coupons/'+c.id).update({on:c.on===false}),c.on===false?`Cupom ${c.code} ativado`:`Cupom ${c.code} desligado`); return true; }
+  if(d.cpdel){ if(delArm!==d.cpdel){ delArm=d.cpdel; el.innerHTML='<i data-lucide="alert-triangle"></i>Confirmar exclusão'; icons(); return true; }
+    const c=D.coupons.find(x=>x.id===d.cpdel); if(await write(()=>DB.doc('coupons/'+d.cpdel).delete(),`Cupom ${c?.code||''} excluído`)){ logAct('Cupom excluído',c?.code||''); closeModal(); } return true; }
+  if(d.uadd!==undefined){ const g=k=>$('#us-'+k); const body={nome:g('name').value.trim(),usuario:g('login').value.trim().toLowerCase(),nivel:g('role').value,senha:g('pass').value};
+    if(await userAction(()=>window.ESRO_API('POST','/usuarios',body),'Usuário criado')) logAct('Usuário do painel criado',body.usuario+' · '+body.nivel); return true; }
+  if(d.uactive){ const u=(US.list||[]).find(x=>x.id===d.uactive); if(u) userAction(()=>window.ESRO_API('PATCH','/usuarios/'+u.id,{ativo:!u.ativo}),u.ativo?`${u.nome} bloqueado(a)`:`${u.nome} liberado(a)`); return true; }
+  if(d.upw){ openUserPw(d.upw); return true; }
+  if(d.upwsave){ if(await userAction(()=>window.ESRO_API('POST','/usuarios/'+d.upwsave+'/senha',{senha:$('#up-pass').value}),'Senha nova salva')) closeModal(); return true; }
+  if(d.udel){ if(delArm!==d.udel){ delArm=d.udel; el.classList.add('danger'); toast('Clique de novo para excluir o usuário'); return true; }
+    const u=(US.list||[]).find(x=>x.id===d.udel); delArm=null; if(await userAction(()=>window.ESRO_API('DELETE','/usuarios/'+d.udel),'Usuário excluído')) logAct('Usuário do painel excluído',u?.usuario||''); return true; }
+  if(d.mpsave!==undefined){ try{ await window.ESRO_API('POST','/minha-senha',{atual:$('#mp-atual').value,nova:$('#mp-nova').value}); $('#mp-atual').value=''; $('#mp-nova').value=''; toast('Senha trocada'); }catch(e){ toast(apiErr(e,'Não foi possível trocar a senha agora.'),1); } return true; }
+  if(d.redesave!==undefined){ const n=parseInt($('#rd-n').value,10); if(!(n>=0)){ $('#rd-n').focus(); toast('Escreva o número de seguidores',1); return true; }
+    try{ await window.ESRO_API('POST','/redes',{rede:$('#rd-rede').value,seguidores:n}); toast('Número anotado'); loadMonitor(true); }catch(e){ toast(apiErr(e,'Não foi possível anotar agora.'),1); } return true; }
+  return false;
+}
+
 /* ---------- Configurações ---------- */
 function vSettings(){
+  if(STANDALONE&&!isAdmin()) return `<div class="page-head"><div><h2>Meu acesso</h2><p>As configurações do painel são alteradas só por administradores.</p></div></div>${myAccessCard()}`;
   const s=D.settings, dis=S.canWrite?'':'disabled';
   const card=(k,ic,bg,fg,name,sub,badge,body)=>`<div class="card"><div class="int-head"><span class="int-ico" style="background:${bg};color:${fg}"><i data-lucide="${ic}"></i></span><div class="grow"><b>${name}</b><small>${sub}</small></div>${badge}</div><div class="int-body">${body}</div></div>`;
   return `${roBanner()}<div class="page-head"><div><h2>Configurações & integrações</h2><p>O que já está ligado de verdade e o que falta para automatizar.</p></div></div>
   <section class="grid integr">
-    ${card('site','globe','var(--site-soft)','var(--site)','Site / E-commerce',esc(s.siteUrl||'esro-papelaria…chatgpt.site'),(L.status==='ok'?'<span class="badge b-ok">Webhook pelo servidor</span>':'<span class="badge b-warn">Registro manual</span>'),
-      `<p class="hint">Pedidos feitos no site entram aqui por <b>Pedidos → Novo pedido</b>, com o nº do pedido web na referência. Para chegarem sozinhos, o site precisa enviar cada pedido para um servidor (webhook) que grave neste painel.</p><a class="btn sm" style="align-self:flex-start" href="${esc(safeUrl(s.siteUrl)||'https://esro-papelaria.robert-silvamaia.chatgpt.site/')}" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i>Abrir o site</a>`)}
+    ${card('site','globe','var(--site-soft)','var(--site)','Site / E-commerce',esc(s.siteUrl||'www.esro-papelaria.com.br'),(STANDALONE?'<span class="badge b-ok">Ligado ao painel</span>':L.status==='ok'?'<span class="badge b-ok">Webhook pelo servidor</span>':'<span class="badge b-warn">Registro manual</span>'),
+      `<p class="hint">${STANDALONE?'O site lê o <b>Catálogo</b> e os produtos da <b>Loja online</b> deste painel, registra as compras direto em <b>Pedidos</b>, envia os pedidos de orçamento para <b>Pedidos → Pedidos novos do site</b>, cria uma ficha em <b>Clientes</b> a cada conta ou pedido de novidades, e manda os números de visitas para <b>Monitoramento</b>.':'Pedidos feitos no site entram aqui por <b>Pedidos → Novo pedido</b>, com o nº do pedido web na referência. No painel do site (www.esro-papelaria.com.br/painel) eles chegam sozinhos.'}</p><a class="btn sm" style="align-self:flex-start" href="${esc(safeUrl(s.siteUrl)||'https://www.esro-papelaria.com.br/')}" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i>Abrir o site</a>`)}
     ${card('wa','message-circle','var(--wa-soft)','var(--wa)','WhatsApp','(11) 99248-1676',L.status==='ok'?'<span class="badge b-ok">API conectada</span>':'<span class="badge b-ok">Link direto ativo</span>',
       `<p class="hint">No Inbox, “Abrir no WhatsApp” abre a conversa do cliente no seu WhatsApp com a mensagem pronta (wa.me). Para <b>receber</b> as mensagens dentro do painel é preciso a API oficial do WhatsApp Business (Meta) e um servidor com webhook.</p>`)}
     ${card('ig','instagram','var(--ig-soft)','var(--ig)','Instagram Direct','@esro.papelaria',L.status==='ok'?'<span class="badge b-ok">API conectada</span>':'<span class="badge b-ok">Link direto ativo</span>',
@@ -728,6 +1103,7 @@ function vSettings(){
       <div class="row"><span class="badge b-neutral">Registro</span><div class="grow"><b>Registro de atividades</b><small style="white-space:normal">Exclusões, importações, exportações e mudanças de configuração ficam anotadas com data e hora.</small></div><button class="btn sm" data-audit><i data-lucide="history"></i>Ver registro</button></div>
     </div>
     <p class="hint" style="margin-top:10px"><b style="color:var(--text)">Depende de você:</b> ${STANDALONE?'use uma senha longa e só deste painel; ative a verificação em duas etapas no GitHub, Render, Supabase, Meta e Nubank; e clique em Sair ao usar o computador de outra pessoa.':`ative a verificação em duas etapas nas contas do Claude, GitHub, Render, Supabase, Meta e Nubank; mantenha o compartilhamento deste painel como privado; e nunca compartilhe o endereço do conector ${CONN}.`}</p></section>
+  ${STANDALONE&&EU()?usersCard()+myAccessCard():''}
   <section class="card"><h3>Planilhas (Excel)</h3><p class="hint">Leve todos os dados do painel para o Excel e traga de volta: pedidos, clientes, estoque, fluxo de caixa, contas fixas, atendimentos e catálogo.</p>
     <div class="compose-actions" style="margin-top:12px"><button class="btn primary" data-xl="all"><i data-lucide="file-spreadsheet"></i>Exportar tudo (.xlsx)</button>
       ${S.canWrite?`<label class="btn" style="cursor:pointer"><i data-lucide="upload"></i>Importar do Excel<input type="file" id="xlFile" accept=".xlsx" hidden></label>`:''}</div>
@@ -764,7 +1140,7 @@ const followState=c=>!c.follow?null:!c.followAt?['b-warn','Acompanhar',1]:c.foll
 const dueFollow=()=>D.clients.filter(c=>{ const f=followState(c); return f&&f[2]>0; });
 const originBadge=c=>{ const o=ORIGINS[c.origin]||ORIGINS.outro; return CH[c.origin]?chBadge(c.origin):`<span class="badge b-neutral"><i data-lucide="${o[1]}"></i>${o[0]}</span>`; };
 const followBadge=c=>{ const f=followState(c); return f?`<span class="badge ${f[0]}"><i data-lucide="bell-ring"></i>${f[1]}</span>`:''; };
-const siteUrl=()=>safeUrl(D.settings.siteUrl)||'https://esro-papelaria.robert-silvamaia.chatgpt.site/';
+const siteUrl=()=>{ const u=safeUrl(D.settings.siteUrl); return u&&!/chatgpt\.site/.test(u)?u:'https://www.esro-papelaria.com.br/'; };
 const linkMsg=c=>`Olá, ${String(c.name||'').trim().split(/\s+/)[0]||'tudo bem'}! 💛 Aqui está o link da ESRO Papelaria, com os produtos e serviços:\n${siteUrl()}\n\nQualquer dúvida é só me chamar.${D.settings.assinatura?'\n\n'+D.settings.assinatura:''}`;
 const cNotes=(c,add)=>[...(c.notes||[]),...add].slice(-200);
 
@@ -778,7 +1154,9 @@ function unlinkedPeople(){
 async function ensureClient(info, stage, note){
   if(!DB||!S.canWrite) return null; const now=new Date().toISOString();
   const h=igH(info.contact), mail=isMail(info.contact)?String(info.contact).trim():'', phone=telKey(info.contact)?String(info.contact).replace(/@\S+/g,'').trim():'';
-  const ex=findClient({id:info.id,contact:info.contact,name:info.name});
+  let ex=findClient({id:info.id,contact:info.contact,name:info.name});
+  // Ficha indicada pelo site (conta do cliente) que ainda não chegou a este aparelho: busca direto no servidor para não criar uma duplicada.
+  if(info.id&&(!ex||ex.id!==info.id)){ try{ const snap=await DB.doc('clients/'+info.id).get(); if(snap.exists) ex={id:info.id,...snap.data()}; }catch(_){} }
   try{
     if(ex){ const up={updatedAt:now,lastAt:now}; if(C_RANK[stage]>C_RANK[cStage(ex.stage)[0]]) up.stage=stage; if(note) up.notes=cNotes(ex,[{at:now,text:note}]); if(!ex.city&&info.city) up.city=info.city; if(!ex.phone&&phone) up.phone=phone; if(!ex.ig&&h) up.ig='@'+h;
       await DB.doc('clients/'+ex.id).update(up); return ex.id; }
@@ -1165,8 +1543,8 @@ const xEnum=(v,pairs)=>{ const n=xn(xv(v)); if(!n) return null; const p=pairs.fi
 const xD=day=>{ if(!day) return ''; const [y,m,d]=day.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); };
 const xIso=day=>{ const [y,m,d]=day.split('-').map(Number); return new Date(y,m-1,d,12).toISOString(); };
 const lab=(pairs,k)=>(pairs.find(p=>p[0]===k)||['',k||''])[1];
-const XCH=[['site','Site'],['whatsapp','WhatsApp'],['instagram','Instagram']], XKIND=[['digital','Digital'],['fisico','Físico']];
-const XPAY=[['PIX','PIX'],['Cartão','Cartão'],['Sinal / Orçamento','Sinal / Orçamento'],['Dinheiro','Dinheiro']], XPAYS=[['Aguardando','Aguardando'],['Sinal pago','Sinal pago'],['Pago','Pago']];
+const XCH=Object.entries(CH).map(([k,c])=>[k,c.label]), XKIND=[['digital','Digital'],['fisico','Físico']];
+const XPAY=PAYS, XPAYS=[['Aguardando','Aguardando'],['Sinal pago','Sinal pago'],['Pago','Pago']];
 const XST=STATUS.map(s=>[s.k,s.l]), XORI=Object.entries(ORIGINS).map(([k,o])=>[k,o[0]]), XSTG=C_STAGE.map(s=>[s[0],s[1]]), XLEAD=LEAD_ST.map(s=>[s[0],s[1]]);
 const XSK=[['produto','Produto'],['insumo','Insumo']], XTYPE=[['in','Entrada'],['out','Saída']], XSIT=[['1','Realizado'],['0','Previsto']], XYN=[['1','Sim'],['0','Não']];
 const yn=b=>b?'Sim':'Não';
@@ -1618,12 +1996,13 @@ function render(){
   killCharts(); renderNav(); renderNotif();
   if(S.dbOk===false){ $('#view').innerHTML=`<div class="card">${emptyState('database','Não foi possível abrir os dados do painel',STANDALONE?'Recarregue a página e entre de novo com a sua senha.':'Abra este painel pelo claude.ai com sua conta conectada. Os pedidos, atendimentos e o catálogo ficam guardados lá.')}</div>`; icons(); return; }
   if(!S.ready){ $('#view').innerHTML='<div class="loading">Carregando dados da ESRO…</div>'; return; }
-  const V={overview:vOverview,orders:vOrders,clients:vClients,catalog:vCatalog,stock:vStock,cash:vCash,inbox:vInbox,arts:vArts,reports:vReports,settings:vSettings};
+  if(!canView(S.view)) S.view='overview';
+  const V={overview:vOverview,orders:vOrders,clients:vClients,catalog:vCatalog,loja:vLoja,stock:vStock,cash:vCash,inbox:vInbox,arts:vArts,reports:vReports,monitor:vMonitor,settings:vSettings};
   $('#view').innerHTML=V[S.view](); icons();
-  if(S.view==='overview') drawOverview(); if(S.view==='reports') drawReports(); if(S.view==='cash') drawCash(); if(S.view==='inbox') afterInbox();
+  if(S.view==='overview') drawOverview(); if(S.view==='reports') drawReports(); if(S.view==='cash') drawCash(); if(S.view==='monitor') drawMonitor(); if(S.view==='inbox') afterInbox();
   if(keep){ const el=document.getElementById(keep.id); if(el){ if('value' in el && keep.v!=null && el.tagName!=='SELECT') el.value=keep.v; el.focus(); try{ el.setSelectionRange(keep.s,keep.e); }catch(_){} } }
 }
-let rT; const soon=()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(S.view==='settings' && S.ready && $('#s-pixKey')){ renderNav(); return; } render(); },60); };
+let rT; const soon=()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(S.view==='settings' && S.ready && ($('#s-pixKey')||$('#usersBox'))){ renderNav(); return; } if(S.view==='loja'&&S.lojaTab==='entrega') readLojaForm(); if($('#pForm')||$('#cpForm')){ renderNav(); return; } render(); },60); };
 
 /* ---------- Eventos ---------- */
 document.addEventListener('click',async e=>{
@@ -1633,7 +2012,10 @@ document.addEventListener('click',async e=>{
   if(el.tagName==='A'){ if(el.id==='waSend'&&S.canWrite&&S.lead&&S.compose.trim()) addNote(S.lead,'Mensagem aberta no WhatsApp:\n'+S.compose.trim()); if(d.clink) clientLink(d.clink); return; }
   if(el.matches('[data-close]')){ if(e.target===el) closeModal(); return; }
   if(d.x!==undefined){ closeModal(); return; }
-  if(d.nav){ go(d.nav); return; }
+  if(d.nav){ readLojaForm(); go(d.nav); return; }
+  if(await lojaClick(el,d)) return;
+  if(d.monDias){ MON.dias=+d.monDias; loadMonitor(); return; }
+  if(d.monRefresh!==undefined){ loadMonitor(true); return; }
   if(d.go){ S.notifOpen=false; if(d.go==='inbox') S.inboxTab=L.convs.some(x=>x.nao_lidas)?'live':S.inboxTab; go(d.go); return; }
   if(d.ch){ S.ch=d.ch; render(); return; }
   if(d.mode){ S.orderMode=d.mode; try{localStorage.setItem('esro-orderMode',d.mode)}catch(_){ } render(); return; }
@@ -1753,6 +2135,7 @@ document.addEventListener('keydown',e=>{
 document.addEventListener('submit',e=>e.preventDefault());
 document.addEventListener('input',e=>{
   const t=e.target;
+  if(t.closest&&t.closest('#ljForm')){ readLojaForm(); return; }
   if(t.id==='q'){ S.q=t.value.trim(); if(S.q && !['orders','clients','inbox','arts','stock','cash'].includes(S.view)) S.view='orders'; clearTimeout(render.t); render.t=setTimeout(render,160); return; }
   if(t.id==='compose'){ S.compose=t.value; const a=$('#waSend'); const l=D.leads.find(x=>x.id===S.lead); if(a&&l) a.href=waLink(l.contact,S.compose); return; }
   if(t.id==='qClient'){ S.quoteClient=t.value; return; }
@@ -1765,6 +2148,10 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
   const t=e.target;
+  if(t.id==='pr-file'){ const fs=[...t.files]; t.value=''; productPhotos(fs); return; }
+  if(t.id==='pr-mode'){ $('#pr-buy').hidden=t.value!=='compra'; $('#pr-quote').hidden=t.value==='compra'; return; }
+  if(t.dataset.ulevel){ const u=(US.list||[]).find(x=>x.id===t.dataset.ulevel); if(u) userAction(()=>window.ESRO_API('PATCH','/usuarios/'+u.id,{nivel:t.value}),`Nível de ${u.nome} alterado`); return; }
+  if(t.closest&&t.closest('#ljForm')){ readLojaForm(); return; }
   if(t.dataset.price){ const [n,i]=t.dataset.price.split(':'); const c=D.catalog.find(x=>x.n===n); const p=parsePrice(t.value); const items=c.items.map((it,j)=>j===+i?{...it,...p}:it); setItems(n,items,`Preço de ${items[+i].name} atualizado`); return; }
   if(t.id==='leadSt'){ const l=D.leads.find(x=>x.id===t.dataset.leadst); const now=new Date().toISOString(); write(()=>DB.doc('leads/'+l.id).update({status:t.value,updatedAt:now}),'Status do atendimento atualizado'); if(t.value==='orcamento') ensureClient({name:l.name,contact:l.contact,ch:l.ch},'link','Orçamento enviado.'); return; }
   if(t.dataset.fst){ const [oid,i]=t.dataset.fst.split(':'); setFileSt(oid,i,t.value); return; }
@@ -1827,4 +2214,7 @@ render();
   db.collection('cash').onSnapshot(s=>{ D.cash=s.docs.map(d=>({id:d.id,...d.data()})); mark('cash'); },onErr('cash'));
   db.collection('stock').onSnapshot(s=>{ D.stock=s.docs.map(d=>({id:d.id,...d.data()})); mark('stock'); },onErr('stock'));
   db.doc('settings/store').onSnapshot(s=>{ D.settings=s.exists?{...s.data()}:{}; mark('settings'); },onErr('settings'));
+  db.collection('products').onSnapshot(s=>{ D.products=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
+  db.collection('coupons').onSnapshot(s=>{ D.coupons=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
+  db.doc('settings/loja').onSnapshot(s=>{ D.loja=s.exists?{...s.data()}:{}; soon(); },()=>{});
 })();

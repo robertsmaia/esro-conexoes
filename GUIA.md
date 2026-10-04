@@ -217,9 +217,57 @@ Troque os arquivos da pasta `site/` no GitHub e faça um novo deploy. O site nã
 - **Cadastro:** nome, e-mail, WhatsApp e senha (mínimo de 8 caracteres). Cada conta nova vira uma ficha em **Clientes** no painel, com origem "site".
 - **Pedidos na conta:** o cliente vê os pedidos ligados à ficha dele (número, item, valor, situação, prazo e pagamento). Observações internas não aparecem. Para um pedido aparecer, escolha o cliente certo ao registrar o pedido no painel.
 - **Cliente que já existia:** a conta nova nunca se junta sozinha a uma ficha antiga, porque o e-mail não é confirmado. Abra a ficha nova em Clientes: se houver ficha antiga com o mesmo WhatsApp ou e-mail, aparece o botão **Unir fichas**. Confira se é a mesma pessoa antes de unir.
-- **Esqueci minha senha:** o site orienta o cliente a chamar no WhatsApp. No painel, abra a ficha do cliente → **Conta no site → Gerar link de senha nova** e envie o link para o WhatsApp da ficha. O link vale 2 horas e funciona uma vez.
+- **Esqueci minha senha:** com os e-mails automáticos ligados (seção 9.11), o site envia o link por e-mail. Sem eles, o site orienta o cliente a chamar no WhatsApp. No painel, abra a ficha do cliente → **Conta no site → Gerar link de senha nova** e envie o link para o WhatsApp da ficha. O link vale 2 horas e funciona uma vez.
 - **Trocar o e-mail de uma conta:** ainda não há tela para isso; o cliente pode excluir a conta e criar outra.
 - Não precisa de configuração nova no Render: a tabela `site_users` é criada sozinha no primeiro deploy.
+
+### 9.7 Site e painel ligados
+| No site | O que acontece no painel |
+|---|---|
+| Cliente monta o pedido e clica em **Enviar pedido de orçamento** | Aparece em **Pedidos → Pedidos novos do site**. Clique em **Importar**, combine o valor e registre. Se o cliente tem conta, o pedido já vai para a ficha dele. |
+| Cliente com conta abre **Minha conta** | Vê o orçamento como "Orçamento solicitado" e, depois de importado, o pedido com a situação que você marcar. |
+| Catálogo e preços da página | Vêm de **Catálogo & Serviços**. Mudou o preço ou desligou um item no painel, o site muda em até 1 minuto. Item desligado também some da vitrine. |
+| **Receba ideias que fazem sentido** (e-mail) | Vira um contato em **Clientes**, com origem "site" e interesse "Novidades por e-mail". |
+| Conta criada no site | Vira uma ficha em **Clientes** (seção 9.6). |
+| Visitas, cliques e pedidos | Aparecem em **Monitoramento**. |
+
+- O número do pedido do site começa com `S` (ex.: `S3KXYDJK`) e vai na mensagem do WhatsApp, para você achar o pedido no painel.
+- A vitrine "Favoritos para começar" mostra os itens que têm ilustração. Para um item novo entrar na vitrine é preciso criar a imagem e incluir o cartão em `site/index.html`.
+- Limites contra abuso: 8 pedidos por hora por endereço e 300 por dia no total; só entram itens que existem no catálogo.
+
+### 9.8 Monitoramento (site, Instagram e atendimento)
+- **Site:** visitas por dia, páginas abertas, de onde as visitas vêm, aparelho, e o caminho até o pedido (visitou → adicionou item → enviou orçamento). A contagem não usa cookies, não guarda IP e não identifica ninguém; ficam só os totais do dia.
+- **Instagram:** seguidores, publicações recentes com curtidas e comentários, e a evolução dos seguidores (o painel guarda o número uma vez por dia). Usa o mesmo `IG_TOKEN` do Direct. Alcance e visualizações só aparecem se o token tiver a permissão `instagram_business_manage_insights`; para incluir, gere o token de novo no painel da Meta marcando essa permissão e atualize `IG_TOKEN` no Render.
+- **Atendimento:** mensagens recebidas e enviadas por dia e o tempo até a primeira resposta, a partir do que passa pelo servidor (Direct do Instagram e, quando conectado, WhatsApp).
+- Outras redes (Facebook, TikTok) não estão ligadas: cada uma exige um aplicativo e uma aprovação próprios.
+
+### 9.9 Pagamento por PIX na conta do cliente
+- Em **Minha conta**, todo pedido com valor em aberto mostra o botão **Pagar com PIX**, com o QR Code e o código "copia e cola" do valor que falta. A chave é a de **Configurações → PIX** do painel; sem chave cadastrada o botão não aparece.
+- O site não recebe aviso do banco. Quando o dinheiro cair, registre o pagamento no pedido (ou importe o extrato em **Fluxo de Caixa**); a cobrança some da conta do cliente e o pedido aparece como pago.
+- O valor cobrado é o **valor do pedido menos o que já foi pago**. Confira o valor ao importar um pedido do site, porque o cliente passa a ver o PIX assim que o pedido é registrado.
+
+### 9.10 Buscadores e compartilhamento
+O site informa o endereço oficial, o cartão que aparece ao compartilhar o link (WhatsApp, Instagram) e um mapa do site em `/sitemap.xml`. Para o Google acompanhar o site, cadastre o domínio no Google Search Console e envie esse mapa.
+
+### 9.11 Loja online: compra direta, frete, cupons, pagamento, e-mails e usuários (versão 1.4)
+O passo a passo de cada recurso está no arquivo **PASSO-A-PASSO-LOJA.md**. Resumo técnico:
+
+| Endereço | O que é |
+|---|---|
+| `/produto/<nome>` | página de cada produto (fotos, opções, quantidade) |
+| `/finalizar` | finalização da compra: dados, CEP e entrega, cupom, pagamento |
+| `/pedido/<código>` | acompanhamento do pedido pelo link secreto enviado ao cliente |
+| `/entregas` | entregas, trocas e devoluções (revise o texto) |
+| `/feed/produtos.xml` | lista de produtos para Instagram/Facebook e Google |
+| `/sitemap.xml` | mapa do site para os buscadores (agora inclui os produtos) |
+| `/webhooks/mercadopago` | aviso de pagamento do Mercado Pago (só existe com `MP_ACCESS_TOKEN`) |
+
+- **Painel:** menu novo **Loja online** (Produtos, Cupons, Entrega e avisos, Integrações); **Configurações → Usuários do painel**; no pedido, o quadro **Envio e nota fiscal**.
+- **Sem configuração nova** já funcionam: produtos, variações, estoque, cupons, PIX, tabela de frete por CEP, retirada, acompanhamento, usuários e níveis.
+- **Opcionais, por variável no Render:** `PUBLIC_URL`, e-mails (`EMAIL_PROVIDER`, `EMAIL_API_KEY`, `EMAIL_FROM`, `EMAIL_OWNER`), Mercado Pago (`MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`) e Melhor Envio (`ME_TOKEN`, `ME_SANDBOX`). A tela **Loja online → Integrações** mostra o que está ligado.
+- **Banco:** a tabela `panel_users` e os produtos iniciais são criados sozinhos no primeiro deploy.
+- **Preço, frete e desconto** são sempre calculados no servidor; o que o navegador envia serve só para dizer quais itens o cliente quer.
+- **Estoque reservado** por compra não paga volta sozinho depois de 48 horas.
 
 ## 10. Segurança
 

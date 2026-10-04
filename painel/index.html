@@ -445,6 +445,40 @@ tr[data-kedit],tr[data-kfedit],tr[data-open]{cursor:pointer}
 .modal-body>.chk{display:flex;align-items:center;gap:8px;font-size:13.5px}
 @media (max-width:760px){ .st-row{grid-template-columns:auto minmax(0,1fr) auto} .st-row select.inp{grid-column:1/-1} }
 td.num b{white-space:nowrap}
+
+/* v6: monitoramento */
+.mbar{flex:0 0 34%;height:8px;background:var(--sand-soft);border-radius:99px;overflow:hidden}
+.mbar>div{height:100%;background:var(--c-in);border-radius:99px}
+.mnum{width:52px;text-align:right}
+.mrow .grow b{white-space:normal;overflow:visible;text-overflow:clip}
+.mstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0}
+.mstats>div{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.mstats small{color:var(--text2);font-size:12px}.mstats b{font-size:20px}
+.msub{margin:16px 0 8px;font-size:14px}
+table.mtable{min-width:560px}
+.mtable .mcap{max-width:340px;white-space:normal;color:var(--text2)}
+@media (max-width:700px){ .mbar{flex-basis:26%} .mtable .mcap{max-width:180px} }
+
+/* v7: loja online e usuários do painel */
+.card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px}
+.prow{align-items:center;flex-wrap:wrap}
+.prow.off .grow,.prow.off .pthumb,.prow.off .pprice{opacity:.55}
+.pthumb{width:52px;height:42px;border-radius:9px;overflow:hidden;background:var(--sand-soft);display:grid;place-items:center;flex:none;color:var(--text2)}
+.pthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.pprice{white-space:nowrap}
+.pimgs{display:flex;flex-wrap:wrap;gap:8px}
+.pimg{position:relative;width:96px;height:77px;border-radius:10px;overflow:hidden;background:var(--sand-soft)}
+.pimg img{width:100%;height:100%;object-fit:cover;display:block}
+.pimg button{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(40,32,28,.72);color:#fff;display:grid;place-items:center;padding:0}
+.pimg button svg{width:14px;height:14px}
+.faixa{display:grid;grid-template-columns:1.5fr .8fr .8fr .7fr 1fr auto;gap:8px;align-items:end}
+.copyline{display:flex;gap:8px;flex-wrap:wrap}
+.copyline input{flex:1;min-width:180px}
+.fl small.hint,.form label small.hint{font-weight:400;letter-spacing:0;font-size:12px}
+@media (max-width:760px){ .faixa{grid-template-columns:1fr 1fr} }
+.inp::placeholder{color:var(--text2);opacity:.6;font-weight:400}
+label.chk{display:flex;flex-direction:row;align-items:center;gap:8px;font-size:13.5px;color:var(--text);font-weight:600;letter-spacing:0}
+label.chk input{flex:none}
 </style>
 </head>
 <body>

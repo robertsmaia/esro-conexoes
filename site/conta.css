@@ -103,6 +103,7 @@ a:focus-visible,button:focus-visible,input[type=checkbox]:focus-visible{outline:
 .status{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;background:var(--tab);color:var(--ink);font-weight:600;font-size:.86rem}
 .status::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--terracotta)}
 .status[data-s=producao]::before,.status[data-s=arte]::before{background:var(--mustard)}
+.status[data-s=solicitado]{background:var(--paper);border:1px dashed var(--terracotta)}.status[data-s=solicitado]::before{background:var(--terracotta)}
 .status[data-s=enviado]::before,.status[data-s=concluido]::before{background:var(--ok)}
 .empty{margin-top:18px;padding:22px;border:1px dashed var(--rule);border-radius:16px}
 .empty p{margin:0 0 16px}
@@ -138,3 +139,19 @@ a:focus-visible,button:focus-visible,input[type=checkbox]:focus-visible{outline:
   .order{grid-template-columns:1fr}.order .value{text-align:left}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* Pagamento por PIX em "Meus pedidos" */
+.pix{grid-column:1/-1;margin-top:6px}
+.pix-box{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;margin-top:14px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--cream)}
+.pix-box[hidden]{display:none}
+.pix-qr{width:216px;height:216px;padding:8px;background:#fff;border-radius:10px;display:grid;place-items:center}
+.pix-qr img,.pix-qr canvas{width:200px;height:200px}
+.pix-qr.off{font-size:.86rem;color:var(--muted);text-align:center}
+.pix-how,.pix-note{margin:0;font-size:.9rem;color:var(--muted)}
+.pix-note{margin-top:12px}
+.pix-lab{display:block;margin:12px 0 6px;font-weight:600;font-size:.9rem}
+.pix-code{width:100%;border:1.5px solid var(--rule);border-radius:10px;background:var(--paper);padding:10px 12px;font:500 .82rem/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);resize:none;word-break:break-all}
+.pix-code:focus{outline:2px solid var(--brown);outline-offset:2px}
+.pix-actions{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin-top:10px}
+.pix-said{font-size:.88rem;color:var(--ok);font-weight:600}
+@media(max-width:560px){.pix-box{grid-template-columns:1fr;justify-items:center}.pix-side{width:100%}}

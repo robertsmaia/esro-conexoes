@@ -9,6 +9,9 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { verifySignature, parseWhatsApp, parseInstagram, sendWhatsApp, sendInstagram, instagramProfile, markWhatsAppRead, ChannelError } from './channels.js';
 import { mountPanel, SITE_DIR, SITE_CSP } from './panel.js';
 import { makeAccounts } from './accounts.js';
+import { makeStore } from './store.js';
+import { makeShop } from './shop.js';
+import { makeMailer } from './mail.js';
 
 const safeEq = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y); };
 
@@ -53,10 +56,11 @@ export function createApp({ cfg, repo, fetchImpl = fetch, log = console }) {
     if (perMinute.add(ip) > maxPerMinute) return tooMany(res, ip, perMinute);
     next();
   });
-  const json = express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf; } });
+  const BAD_KEYS = new Set(['toString', 'valueOf', '__proto__', 'constructor', 'prototype']);   // chaves que quebrariam a conversão para texto ou mexeriam no protótipo dos objetos
+  const json = express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf; }, reviver: (k, v) => (BAD_KEYS.has(k) ? undefined : v) });
   app.use((req, res, next) => req.path === '/painel/api/assets' ? next() : json(req, res, next));   // o envio de arquivos lê o corpo bruto
 
-  const status = () => ({ ok: true, servico: 'ESRO conexões', whatsapp: !!cfg.whatsapp.token, instagram: !!cfg.instagram.token });
+  const status = () => ({ ok: true, servico: 'ESRO conexões', whatsapp: !!cfg.whatsapp.token, instagram: !!cfg.instagram.token });   // não revela quais integrações de loja estão ligadas
   app.get('/healthz', (_req, res) => res.json(status()));
 
   // Site público (pasta site/). Sem a pasta, a raiz responde só com o status do servidor.
@@ -64,8 +68,15 @@ export function createApp({ cfg, repo, fetchImpl = fetch, log = console }) {
   const siteHeaders = (res) => res.set({ 'Content-Security-Policy': SITE_CSP, 'Cache-Control': 'public, max-age=600', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
   app.get('/', (_req, res) => { if (!hasSite) return res.json(status()); siteHeaders(res); res.sendFile(path.join(SITE_DIR, 'index.html')); });
   // Contas de clientes do site: telas /entrar e /conta e as rotas em /api/conta.
-  const accounts = makeAccounts({ cfg, repo, log, guard, clientIp, counter });
+  const mailer = makeMailer(cfg, fetchImpl, log);   // e-mails automáticos (só envia se EMAIL_PROVIDER, EMAIL_API_KEY e EMAIL_FROM estiverem cadastrados)
+  const accounts = makeAccounts({ cfg, repo, log, guard, clientIp, counter, mailer });
   if (hasSite) accounts.mount(app, siteHeaders);
+  // Compra direta: produtos, frete, cupons, pagamento, acompanhamento do pedido e lista de produtos para outros canais.
+  const direct = makeShop({ cfg, repo, log, clientIp, counter, accounts, mailer, fetchImpl });
+  if (hasSite) direct.mount(app, siteHeaders);
+  // Loja: catálogo público, pedido de orçamento, novidades e contagem de visitas (/api/...), mais os números do Monitoramento.
+  const shop = makeStore({ cfg, repo, log, clientIp, counter, accounts, shop: direct, mailer, fetchImpl });
+  if (hasSite) shop.mount(app);
   if (hasSite) app.use(express.static(SITE_DIR, { index: false, redirect: false, setHeaders: siteHeaders }));
 
   // Verificação do webhook (Meta chama com hub.challenge ao salvar a URL no painel de desenvolvedor)
@@ -139,7 +150,8 @@ export function createApp({ cfg, repo, fetchImpl = fetch, log = console }) {
   app.all('/mcp/:secret', mcpAuth, (_req, res) => res.status(405).set('Allow', 'POST').json({ jsonrpc: '2.0', error: { code: -32000, message: 'Use POST.' }, id: null }));
 
   // Painel administrativo (login próprio) em /painel
-  mountPanel(app, { cfg, repo, tools, log, guard, accounts });
+  mountPanel(app, { cfg, repo, tools, log, guard, accounts, store: shop, shop: direct });
+  app.locals.store = shop; app.locals.shop = direct;
 
   // Qualquer outro caminho: resposta curta, sem detalhes internos.
   app.use((_req, res) => res.status(404).json({ erro: 'não encontrado' }));
@@ -199,7 +211,7 @@ export function makeTools({ cfg, repo, fetchImpl = fetch }) {
 }
 
 export function buildMcp(tools) {
-  const s = new McpServer({ name: 'esro-conexoes', version: '1.2.0' });
+  const s = new McpServer({ name: 'esro-conexoes', version: '1.4.0' });
   for (const [name, t] of Object.entries(tools)) {
     s.registerTool(name, { title: t.title, description: t.description, inputSchema: t.input, annotations: t.annotations }, async (args) => {
       try { return { content: [{ type: 'text', text: JSON.stringify(await t.run(args || {})) }] }; }

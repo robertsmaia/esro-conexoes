@@ -37,3 +37,20 @@ services:
         generateValue: true
       - key: SITE_WEBHOOK_TOKEN
         generateValue: true
+      # Loja online (opcionais; veja PASSO-A-PASSO-LOJA.md)
+      - key: PUBLIC_URL
+        sync: false
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_OWNER
+        sync: false
+      - key: MP_ACCESS_TOKEN
+        sync: false
+      - key: MP_WEBHOOK_SECRET
+        sync: false
+      - key: ME_TOKEN
+        sync: false

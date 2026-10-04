@@ -21,6 +21,14 @@
     e.status = r.status; e.campo = j && j.campo; throw e;
   }
 
+  async function fetchForgot(email) {
+    var r, j = null;
+    try { r = await fetch('/api/conta/esqueci', { method: 'POST', headers: { 'X-ESRO': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }), credentials: 'same-origin' }); }
+    catch (_) { throw new Error('Não foi possível falar com o servidor. Confira a internet e tente de novo.'); }
+    try { j = await r.json(); } catch (_) { }
+    if (!r.ok) { var e = new Error((j && j.erro) || FALLBACK[r.status] || 'Não foi possível enviar o link agora.'); e.status = r.status; throw e; }
+  }
+
   /* ---------- Campos ---------- */
   function maskPhone(v) {
     var d = String(v).replace(/\D/g, '');
@@ -114,6 +122,17 @@
 
     var forgotBtn = $('#forgotBtn'), forgotBox = $('#forgotBox');
     forgotBtn.addEventListener('click', function () { var open = forgotBox.hidden; forgotBox.hidden = !open; forgotBtn.setAttribute('aria-expanded', String(open)); });
+    // Se a loja tem envio de e-mails ligado, o link de senha nova vai por e-mail; senão, é pedido pelo WhatsApp.
+    var fMail = $('#forgotMail'), fWa = $('#forgotWa'), fSend = $('#forgotSend'), fSaid = $('#forgotSaid');
+    fetch('/api/loja', { headers: { 'X-ESRO': '1' } }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.emailSenha && fMail) { fMail.hidden = false; fWa.hidden = true; } }).catch(function () { });
+    if (fSend) fSend.addEventListener('click', async function () {
+      var form = $('#form-entrar'), email = form.elements.email.value.trim(); clearErrors(form); fSaid.hidden = true;
+      if (!/^\S+@\S+\.\S+$/.test(email)) { setError(form, 'email', 'Escreva aqui o e-mail da sua conta e peça o link de novo.'); return; }
+      var label = fSend.textContent; fSend.disabled = true; fSend.textContent = fSend.getAttribute('data-busy');
+      try { await fetchForgot(email); fSaid.textContent = 'Se existir uma conta com este e-mail, o link chega em alguns minutos. Olhe também a caixa de spam.'; }
+      catch (e) { fSaid.textContent = e.message; if (e.status === 503) { fMail.hidden = true; fWa.hidden = false; } }
+      finally { fSaid.hidden = false; fSend.disabled = false; fSend.textContent = label; }
+    });
 
     onSubmit(formIn, guard(formIn, async function () {
       if (!check(formIn, [['email', 'email'], ['senha', 'senha']])) throw stop();
@@ -168,9 +187,47 @@
       li.appendChild(left); li.appendChild(el('div', 'value', o.valor > 0 ? money(o.valor) : ''));
       var foot = el('div', 'foot'), st = el('span', 'status', o.statusNome); st.setAttribute('data-s', o.status); foot.appendChild(st);
       if (o.entrega && o.status !== 'concluido') foot.appendChild(el('span', null, 'Entrega prevista para ' + day(o.entrega)));
-      foot.appendChild(el('span', null, PAY[o.pagamento] || PAY.Aguardando));
-      li.appendChild(foot); ul.appendChild(li);
+      foot.appendChild(el('span', null, o.falta > 0 && o.pago > 0 ? 'Pago ' + money(o.pago) + ', falta ' + money(o.falta) : (PAY[o.pagamento] || PAY.Aguardando)));
+      if (o.rastreio) foot.appendChild(el('span', null, 'Rastreio: ' + o.rastreio));
+      if (o.acompanhar) { var more = el('a', 'link', 'Ver detalhes do pedido'); more.href = o.acompanhar; foot.appendChild(more); }
+      li.appendChild(foot);
+      if (o.pix && o.pix.codigo) li.appendChild(pixBox(o));
+      ul.appendChild(li);
     });
+  }
+
+  /* Pagamento por PIX: mostra o QR e o "copia e cola" do valor que falta. Quem confirma o recebimento é a ESRO. */
+  var pixSeq = 0;
+  function pixBox(o) {
+    var wrap = el('div', 'pix'), id = 'pix-' + (++pixSeq);
+    var btn = el('button', 'btn primary small', 'Pagar ' + money(o.pix.valor) + ' com PIX'); btn.type = 'button'; btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', id);
+    var box = el('div', 'pix-box'); box.id = id; box.hidden = true;
+    var qr = el('div', 'pix-qr'); qr.setAttribute('role', 'img'); qr.setAttribute('aria-label', 'QR Code do PIX de ' + money(o.pix.valor));
+    var side = el('div', 'pix-side');
+    side.appendChild(el('p', 'pix-how', 'Abra o app do seu banco, escolha pagar com PIX e leia o QR Code, ou copie o código abaixo e use a opção "PIX copia e cola".'));
+    var lab = el('label', 'pix-lab', 'Código copia e cola'), code = document.createElement('textarea');
+    code.className = 'pix-code'; code.readOnly = true; code.rows = 5; code.value = o.pix.codigo; code.id = id + '-code'; lab.setAttribute('for', code.id);
+    var copy = el('button', 'btn secondary small', 'Copiar código'); copy.type = 'button';
+    var said = el('span', 'pix-said'); said.setAttribute('role', 'status');
+    copy.addEventListener('click', async function () {
+      var ok = false;
+      try { await navigator.clipboard.writeText(o.pix.codigo); ok = true; } catch (_) { try { code.focus(); code.select(); ok = document.execCommand('copy'); } catch (__) { ok = false; } }
+      said.textContent = ok ? 'Código copiado.' : 'Selecione o código e copie manualmente.';
+    });
+    code.addEventListener('focus', function () { code.select(); });
+    side.appendChild(lab); side.appendChild(code);
+    var row = el('div', 'pix-actions'); row.appendChild(copy); row.appendChild(said); side.appendChild(row);
+    side.appendChild(el('p', 'pix-note', 'Favorecido: ' + o.pix.favorecido + '. Depois do pagamento, a ESRO confirma o recebimento e a situação do pedido é atualizada aqui.'));
+    box.appendChild(qr); box.appendChild(side);
+    btn.addEventListener('click', function () {
+      var open = box.hidden; box.hidden = !open; btn.setAttribute('aria-expanded', String(open));
+      if (open && !qr.firstChild) {
+        try { new QRCode(qr, { text: o.pix.codigo, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M }); }
+        catch (_) { qr.textContent = 'QR Code indisponível. Use o código copia e cola.'; qr.className = 'pix-qr off'; }
+      }
+    });
+    wrap.appendChild(btn); wrap.appendChild(box);
+    return wrap;
   }
 
   async function initAccount() {
@@ -206,6 +263,12 @@
       location.assign('/');
     }));
   }
+
+  /* Contagem de visitas: sem cookies; só avisa o servidor qual página abriu. */
+  (function () {
+    var first = true; try { first = !sessionStorage.getItem('esro_v'); sessionStorage.setItem('esro_v', '1'); } catch (_) { }
+    try { fetch('/api/v', { method: 'POST', headers: { 'X-ESRO': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(first ? { p: location.pathname, n: true, r: document.referrer || '' } : { p: location.pathname }), keepalive: true, credentials: 'omit' }).catch(function () { }); } catch (_) { }
+  })();
 
   if (page === 'entrar') initAuth();
   else if (page === 'conta') initAccount();

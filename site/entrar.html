@@ -44,8 +44,15 @@
               <div class="forgot">
                 <button class="link" type="button" id="forgotBtn" aria-expanded="false" aria-controls="forgotBox">Esqueci minha senha</button>
                 <div class="forgot-box" id="forgotBox" hidden>
-                  <p>A troca de senha é feita pelo WhatsApp. Chame a ESRO pelo número que você cadastrou e peça o link para criar uma senha nova.</p>
-                  <a class="btn secondary small" href="https://wa.me/5511992481676?text=Ol%C3%A1%2C%20ESRO!%20Esqueci%20a%20senha%20da%20minha%20conta%20no%20site.%20Pode%20me%20enviar%20o%20link%20para%20criar%20uma%20senha%20nova%3F" target="_blank" rel="noopener noreferrer">Pedir o link pelo WhatsApp</a>
+                  <div id="forgotMail" hidden>
+                    <p>Escreva o e-mail da sua conta no campo acima e peça o link. Ele chega no seu e-mail e vale por 2 horas.</p>
+                    <button class="btn secondary small" type="button" id="forgotSend" data-busy="Enviando…">Enviar link para o meu e-mail</button>
+                    <p class="hint" id="forgotSaid" role="status" hidden></p>
+                  </div>
+                  <div id="forgotWa">
+                    <p>A troca de senha é feita pelo WhatsApp. Chame a ESRO pelo número que você cadastrou e peça o link para criar uma senha nova.</p>
+                    <a class="btn secondary small" href="https://wa.me/5511992481676?text=Ol%C3%A1%2C%20ESRO!%20Esqueci%20a%20senha%20da%20minha%20conta%20no%20site.%20Pode%20me%20enviar%20o%20link%20para%20criar%20uma%20senha%20nova%3F" target="_blank" rel="noopener noreferrer">Pedir o link pelo WhatsApp</a>
+                  </div>
                 </div>
               </div>
             </form>

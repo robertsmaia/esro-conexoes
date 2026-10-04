@@ -7,3 +7,4 @@ Disallow: /webhooks/
 Disallow: /api/
 Disallow: /conta
 Disallow: /entrar
+Sitemap: https://www.esro-papelaria.com.br/sitemap.xml

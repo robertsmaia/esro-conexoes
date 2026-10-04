@@ -5,10 +5,10 @@
   'use strict';
   window.ESRO_STANDALONE = true;
   var API = '/painel/api', CONN = 'ESRO Conexões';
-  var CODES = { 400: 'unavailable', 401: 'not_granted', 403: 'not_granted', 404: 'unavailable', 413: 'too_large', 415: 'unsupported_type', 422: 'tool_error', 429: 'resource_exhausted', 503: 'disabled', 507: 'quota_exceeded' };
+  var CODES = { 400: 'unavailable', 401: 'not_granted', 403: 'not_granted', 404: 'not_found', 409: 'tool_error', 413: 'too_large', 415: 'unsupported_type', 422: 'tool_error', 429: 'resource_exhausted', 503: 'disabled', 507: 'quota_exceeded' };
   function fail(code, message) { var e = new Error(message || code); e.code = code; return e; }
 
-  var loginWait = null;
+  var loginWait = null, booted = false, ME = null;
   async function http(method, path, body, opt) {
     opt = opt || {}; var headers = Object.assign({ 'X-ESRO': '1' }, opt.headers || {}), payload;
     if (opt.raw) payload = body; else if (body !== undefined) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body); }
@@ -34,22 +34,33 @@
       if (logo) { var im = el('img', { src: logo.src, alt: '' }); im.style.cssText = 'width:72px;height:72px;border-radius:50%;align-self:center'; form.appendChild(im); }
       var h = el('h2', { id: 'esroLoginT' }, 'Painel ESRO'); h.style.cssText = 'margin:0;text-align:center;font-size:22px'; form.appendChild(h);
       var p = el('p', null, 'Entre com a senha do painel.'); p.style.cssText = 'margin:0;text-align:center;color:var(--text2,#7C716A)'; form.appendChild(p);
-      var user = el('input', { type: 'text', name: 'username', autocomplete: 'username', value: 'esro', hidden: '' }); form.appendChild(user);
-      var lab = el('label', null, 'Senha'); lab.style.cssText = 'display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:12.5px;color:var(--text2,#7C716A)';
-      var inp = el('input', { type: 'password', name: 'password', autocomplete: 'current-password', required: '', class: 'inp' }); inp.style.cssText = 'padding:11px 12px;border:1px solid var(--line,#EFE7DE);border-radius:10px;font:inherit;background:var(--card,#fff);color:inherit';
+      var labCss = 'display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:12.5px;color:var(--text2,#7C716A)', inpCss = 'padding:11px 12px;border:1px solid var(--line,#EFE7DE);border-radius:10px;font:inherit;background:var(--card,#fff);color:inherit';
+      // Equipe entra com usuário e senha; a dona entra só com a senha principal (campo de usuário vazio).
+      var ulab = el('label', null, 'Usuário'); ulab.style.cssText = labCss;
+      var user = el('input', { type: 'text', name: 'username', autocomplete: 'username', autocapitalize: 'none', spellcheck: 'false', maxlength: '40', class: 'inp', placeholder: 'Deixe vazio para a senha principal' }); user.style.cssText = inpCss;
+      try { user.value = localStorage.getItem('esro-usuario') || ''; } catch (_) { }
+      ulab.appendChild(user); form.appendChild(ulab);
+      var lab = el('label', null, 'Senha'); lab.style.cssText = labCss;
+      var inp = el('input', { type: 'password', name: 'password', autocomplete: 'current-password', required: '', class: 'inp' }); inp.style.cssText = inpCss;
       lab.appendChild(inp); form.appendChild(lab);
       var msg = el('div', { role: 'alert' }); msg.style.cssText = 'color:var(--crit,#B4493A);font-size:13px;min-height:18px'; form.appendChild(msg);
       var btn = el('button', { type: 'submit', class: 'btn primary' }, 'Entrar'); btn.style.cssText = 'justify-content:center;padding:11px 14px;border-radius:11px;border:0;background:var(--primary,#9C5237);color:#fff;font-weight:700;font:inherit;font-weight:700;cursor:pointer'; form.appendChild(btn);
       var back = el('a', { href: '/' }, 'Voltar ao site'); back.style.cssText = 'text-align:center;color:var(--text2,#7C716A);font-size:13px'; form.appendChild(back);
       form.addEventListener('submit', async function (ev) {
         ev.preventDefault(); ev.stopPropagation(); msg.textContent = ''; btn.disabled = true; btn.textContent = 'Entrando…';
-        try { await http('POST', '/login', { senha: inp.value }, { noLogin: true }); wrap.remove(); loginWait = null; resolve(); }
+        var who = user.value.trim().toLowerCase();
+        try {
+          await http('POST', '/login', who ? { usuario: who, senha: inp.value } : { senha: inp.value }, { noLogin: true });
+          try { if (who) localStorage.setItem('esro-usuario', who); else localStorage.removeItem('esro-usuario'); } catch (_) { }
+          if (booted) { location.reload(); return; }   // a sessão caiu no meio do uso: recarrega para valer o acesso de quem entrou agora
+          wrap.remove(); loginWait = null; resolve();
+        }
         catch (e) {
-          msg.textContent = e.code === 'not_granted' ? 'Senha incorreta.' : e.code === 'resource_exhausted' ? 'Muitas tentativas. Aguarde 15 minutos e tente de novo.' : e.code === 'disabled' ? (e.message || 'Painel desativado.') : 'Não foi possível falar com o servidor. Tente de novo.';
+          msg.textContent = e.code === 'not_granted' ? (e.message && e.message !== e.code ? e.message : 'Senha incorreta.') : e.code === 'resource_exhausted' ? 'Muitas tentativas. Aguarde 15 minutos e tente de novo.' : e.code === 'disabled' ? (e.message || 'Painel desativado.') : 'Não foi possível falar com o servidor. Tente de novo.';
           btn.disabled = false; btn.textContent = 'Entrar'; inp.select();
         }
       });
-      wrap.appendChild(form); document.body.appendChild(wrap); inp.focus();
+      wrap.appendChild(form); document.body.appendChild(wrap); (user.value ? inp : inp).focus();
     });
     return loginWait;
   }
@@ -87,7 +98,7 @@
   function docRef(col, id) {
     var path = '/db/' + encodeURIComponent(col) + '/' + encodeURIComponent(id);
     return { id: id, path: col + '/' + id,
-      get: async function () { return docSnap(col, id); },
+      get: async function () { try { await sync(); } catch (_) { } return docSnap(col, id); },   // busca o que mudou no servidor antes de responder
       set: async function (data) { var clean = JSON.parse(JSON.stringify(data)); await http('PUT', path, clean); if (apply(col, id, clean)) notify(new Set([col])); },
       update: async function (patch) { var r = await http('PATCH', path, JSON.parse(JSON.stringify(patch))); if (apply(col, id, r.data)) notify(new Set([col])); },
       delete: async function () { await http('DELETE', path); if (apply(col, id, null, true)) notify(new Set([col])); },
@@ -130,19 +141,21 @@
     },
     invalidate: async function (_server, tool) { watchers.forEach(function (w) { if (!tool || w.tool === tool) w.run(); }); }
   };
-  var user = { can: async function () { return true; }, canEdit: async function () { return true; }, isOwner: async function () { return true; }, id: async function () { return 'admin'; } };
+  var user = { can: async function () { return true; }, canEdit: async function () { return true; }, isOwner: async function () { return !!(ME && ME.usuario && ME.usuario.dono); }, id: async function () { return ME && ME.usuario ? ME.usuario.usuario : 'admin'; } };
   var caps = { db: db, user: user, assets: assets, downloads: downloads, mcp: mcp };
 
   /* ---------- Início: confere a sessão, pede login se preciso, carrega os dados ---------- */
   var boot = (async function () {
     for (;;) {
-      try { await http('GET', '/me', undefined, { noLogin: true }); break; }
+      try { ME = await http('GET', '/me', undefined, { noLogin: true }); window.ESRO_ME = ME; break; }   // quem entrou e o que o nível dela permite
       catch (e) { if (e.code === 'not_granted' || e.code === 'disabled') await askLogin(); else await new Promise(function (r) { setTimeout(r, 2500); }); }
     }
     for (;;) { try { await sync(); break; } catch (_) { if (loginWait) await loginWait; else await new Promise(function (r) { setTimeout(r, 2500); }); } }
     setInterval(function () { if (document.visibilityState === 'visible' && !loginWait) sync().catch(function () { }); }, 5000);
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && !loginWait) sync().catch(function () { }); });
+    booted = true;
     var prof = document.querySelector('.profile');
+    if (prof && ME && ME.usuario) { var wb = prof.querySelector('.who b'), ws = prof.querySelector('.who small'); if (wb) wb.textContent = ME.usuario.dono ? 'Admin ESRO' : ME.usuario.nome; if (ws) ws.textContent = ME.usuario.dono ? 'Gestão da loja' : ME.usuario.nivelNome; }
     if (prof) { var out = el('button', { type: 'button', class: 'btn sm', id: 'esroLogout', title: 'Sair do painel' }, 'Sair'); out.style.marginLeft = '4px';
       out.addEventListener('click', async function (ev) { ev.stopPropagation(); try { await http('POST', '/logout', {}, { noLogin: true }); } catch (_) { } location.reload(); }); prof.appendChild(out); }
   })();

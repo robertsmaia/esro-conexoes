@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23E7B5A2'/%3E%3Cpath d='M18 25c0-8 10-10 14-2 4-8 14-6 14 2 0 10-14 19-14 19S18 35 18 25Z' fill='none' stroke='%2340261C' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/conta.css">
+  <link rel="stylesheet" href="/loja.css">
+  <meta name="referrer" content="no-referrer">
+  <title>Acompanhar pedido | ESRO</title>
+</head>
+<body data-page="pedido">
+  <div class="top"><a href="https://wa.me/5511992481676" target="_blank" rel="noopener noreferrer">Pedidos e orçamentos pelo WhatsApp: (11) 99248-1676</a></div>
+  <header class="header">
+    <nav class="wrap nav" aria-label="Navegação">
+      <a class="brand" href="/" aria-label="ESRO, página inicial">Esro<span aria-hidden="true">♥</span></a>
+      <div class="nav-links"><a class="back" href="/">Voltar ao site</a></div>
+    </nav>
+  </header>
+
+  <main class="shop">
+    <div class="wrap">
+      <p class="loading" id="loading" role="status">Abrindo o seu pedido…</p>
+      <noscript><p class="msg bad">Para acompanhar o pedido é preciso ativar o JavaScript do navegador.</p></noscript>
+      <div class="card empty-cart" id="notFound" hidden>
+        <h2>Pedido não encontrado</h2>
+        <p id="notFoundText">Confira se o link está completo. Se preferir, fale com a ESRO pelo WhatsApp.</p>
+        <div class="actions"><a class="btn primary" href="https://wa.me/5511992481676" target="_blank" rel="noopener noreferrer">Falar com a ESRO</a></div>
+      </div>
+
+      <div id="content" hidden>
+        <div class="track-head">
+          <div><h1 id="title" tabindex="-1">Pedido</h1><p id="when"></p></div>
+          <a class="btn secondary small" id="waBtn" href="https://wa.me/5511992481676" target="_blank" rel="noopener noreferrer">Falar sobre este pedido</a>
+        </div>
+        <ol class="steps" id="steps" aria-label="Etapas do pedido"></ol>
+        <div class="track">
+          <section class="card" aria-labelledby="payT">
+            <h2 id="payT">Pagamento</h2>
+            <div id="payBox"></div>
+          </section>
+          <div>
+            <section class="card" aria-labelledby="itT">
+              <h2 id="itT">Itens</h2>
+              <ul class="sum-items" id="items"></ul>
+              <div class="totals" id="totals"></div>
+            </section>
+            <section class="card" aria-labelledby="shT">
+              <h2 id="shT">Entrega</h2>
+              <dl class="kv" id="shipBox"></dl>
+            </section>
+          </div>
+        </div>
+        <p class="save-link">Guarde este endereço: é por ele que você acompanha o pedido. Quem tiver o link vê as informações desta página.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="foot-mini"><div class="wrap"><span>© 2026 ESRO. Papelaria com propósito.</span><span><a href="/entregas">Entregas e trocas</a> · <a href="/privacidade">Política de Privacidade</a></span></div></footer>
+  <script src="/vendor/qrcodejs-1.0.0.min.js"></script>
+  <script src="/pedido.js"></script>
+</body>
+</html>

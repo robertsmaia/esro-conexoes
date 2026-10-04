@@ -10,6 +10,7 @@ import { createApp } from '../src/app.js';
 const SECRET = 'segredo-de-teste-com-mais-de-24-caracteres';
 const cfg = loadConfig({ MCP_SECRET: SECRET, WA_TOKEN: 'wa-token', WA_PHONE_NUMBER_ID: '123', WA_APP_SECRET: 'app-secret', WA_VERIFY_TOKEN: 'verifica',
   IG_TOKEN: 'ig-token', IG_APP_SECRET: 'ig-secret', IG_VERIFY_TOKEN: 'verifica-ig', SITE_WEBHOOK_TOKEN: 'site-token', PAINEL_SENHA: 'senha-do-painel-123' });
+cfg.store = { catalogTtlMs: 0, ordersPerHour: 6 };   // nos testes o catálogo do site não fica em memória
 const sent = [];
 const fakeFetch = async (url, opts = {}) => {
   sent.push({ url, body: opts.body ? JSON.parse(opts.body) : null, headers: opts.headers });
@@ -17,6 +18,11 @@ const fakeFetch = async (url, opts = {}) => {
   if (url.includes('graph.facebook.com') && JSON.parse(opts.body).to === '5511900000000') return json({ error: { code: 131047, message: 'Re-engagement message' } }, 400);
   if (url.includes('graph.facebook.com')) return json({ messages: [{ id: 'wamid.OUT1' }] });
   if (url.includes('graph.instagram.com') && url.includes('/messages')) return json({ recipient_id: 'IGSID1', message_id: 'mid.OUT1' });
+  if (url.includes('graph.instagram.com') && url.includes('/me/insights')) return json({ error: { code: 10, message: 'sem permissão' } }, 403);
+  if (url.includes('graph.instagram.com') && url.includes('/me/media')) return json({ data: [
+    { id: 'm1', caption: 'Agenda 2027\ncom nome na capa', media_type: 'IMAGE', permalink: 'https://www.instagram.com/p/abc/', timestamp: '2026-10-01T12:00:00+0000', like_count: 42, comments_count: 5 },
+    { id: 'm2', media_type: 'VIDEO', media_product_type: 'REELS', permalink: 'javascript:alert(1)', timestamp: '2026-09-28T12:00:00+0000', like_count: 7, comments_count: 0 }] });
+  if (url.includes('graph.instagram.com') && url.includes('/me?')) return json({ user_id: '1', username: 'esro.papelaria', name: 'ESRO', followers_count: 321, follows_count: 100, media_count: 18 });
   if (url.includes('graph.instagram.com')) return json({ name: 'Carol Mendes', username: 'prof.carol' });
   return json({}, 404);
 };
@@ -142,8 +148,8 @@ test('Segurança: webhook sem assinatura é recusado e o conteúdo bruto não é
 });
 
 test('Segurança: tabelas fechadas para a API pública do banco (RLS)', async () => {
-  const r = await pg.query(`SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('contacts','messages','site_orders','kv','panel_docs','panel_assets') ORDER BY relname`);
-  assert.deepEqual(r.rows.map(x => [x.relname, x.relrowsecurity]), [['contacts', true], ['kv', true], ['messages', true], ['panel_assets', true], ['panel_docs', true], ['site_orders', true]]);
+  const r = await pg.query(`SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('contacts','messages','site_orders','kv','panel_docs','panel_assets','site_stats','social_stats','site_users','panel_users') ORDER BY relname`);
+  assert.deepEqual(r.rows.map(x => [x.relname, x.relrowsecurity]), [['contacts', true], ['kv', true], ['messages', true], ['panel_assets', true], ['panel_docs', true], ['panel_users', true], ['site_orders', true], ['site_stats', true], ['site_users', true], ['social_stats', true]]);
 });
 
 test('Segurança: bloqueio após tentativas com segredo errado e limite de requisições', async () => {
@@ -176,6 +182,7 @@ test('Site: página pública na raiz, com política de segurança e sem scripts 
   for (const [, src] of pics) { const im = await fetch(base + '/' + src); assert.equal(im.status, 200); assert.match(im.headers.get('content-type'), /image\/svg\+xml/);
     const svg = await im.text(); assert.ok(!/<script|<foreignObject|\son\w+=|href=/i.test(svg)); assert.ok(svg.length < 60000); }
   assert.match(await (await fetch(base + '/robots.txt')).text(), /Disallow: \/painel/);
+  const sm = await fetch(base + '/sitemap.xml'); assert.equal(sm.status, 200); assert.match(sm.headers.get('content-type'), /xml/); assert.ok((await sm.text()).includes(`<loc>${base}/</loc>`)); assert.match(html, /property="og:image"/);
   assert.equal((await fetch(base + '/../src/config.js')).status, 404); assert.equal((await fetch(base + '/.env')).status, 404);
 });
 
@@ -306,9 +313,23 @@ test('Conta: o cliente só vê os próprios pedidos; dados alterados vão para a
   await api('PUT', '/db/orders/pm1', { num: 2001, at: '2026-10-01T12:00:00.000Z', client: 'Marina Souza', clientId: row.client_id, item: 'Planner personalizado', qty: 2, value: 150, status: 'producao', payS: 'Sinal pago', due: '2026-10-20', note: 'anotação interna' }, adm);
   await api('PUT', '/db/orders/pm2', { num: 2002, at: '2026-10-02T12:00:00.000Z', client: 'Outra Pessoa', clientId: 'cli_outra', item: 'Agenda', value: 60, status: 'novo' }, adm);
   await api('PUT', '/db/orders/pm3', { num: 2003, at: '2026-10-03T12:00:00.000Z', client: 'Marina Souza', contact: '(11) 98765-4321', item: 'Sem vínculo', value: 10, status: 'novo' }, adm);   // mesmo telefone, sem vínculo: não aparece
+  const antes = (await pg.query(`SELECT data FROM panel_docs WHERE col = 'settings' AND id = 'store' AND deleted = false`)).rows[0]?.data;   // configurações deixadas por outros testes
+  await api('DELETE', '/db/settings/store', undefined, adm);
   const { pedidos } = await (await conta('GET', '/pedidos', null, cookie)).json();
   assert.equal(pedidos.length, 1);
-  assert.deepEqual(pedidos[0], { numero: 2001, data: '2026-10-01T12:00:00.000Z', item: 'Planner personalizado', quantidade: 2, valor: 150, status: 'producao', statusNome: 'Em produção', entrega: '2026-10-20', pagamento: 'Sinal pago' });
+  // Sem chave PIX cadastrada no painel não há código de pagamento; "sinal pago" sem valor informado conta como metade.
+  assert.deepEqual(pedidos[0], { numero: 2001, data: '2026-10-01T12:00:00.000Z', item: 'Planner personalizado', quantidade: 2, valor: 150, pago: 75, falta: 75, status: 'producao', statusNome: 'Em produção', entrega: '2026-10-20', pagamento: 'Sinal pago', pix: null, acompanhar: null, rastreio: null });
+  // Com a chave PIX cadastrada, o cliente recebe o "copia e cola" só do valor que falta, com o código de conferência (CRC) correto.
+  await api('PUT', '/db/settings/store', { pixType: 'cpf', pixKey: '12.345.678/0001-95', pixName: 'ESRO Papelaria', pixCity: 'São Paulo' }, adm);
+  await api('PUT', '/db/orders/pm4', { num: 2004, at: '2026-10-04T12:00:00.000Z', client: 'Marina Souza', clientId: row.client_id, item: 'Agenda', value: 60, status: 'concluido', payS: 'Pago', pays: [{ at: '2026-10-04T12:00:00.000Z', value: 60 }] }, adm);
+  const comPix = (await (await conta('GET', '/pedidos', null, cookie)).json()).pedidos;
+  const p1 = comPix.find(p => p.numero === 2001), p4 = comPix.find(p => p.numero === 2004);
+  assert.equal(p4.pix, null); assert.equal(p4.falta, 0); assert.equal(p4.pago, 60);
+  assert.equal(p1.pix.valor, 75); assert.equal(p1.pix.favorecido, 'ESRO Papelaria');
+  const code = p1.pix.codigo; assert.match(code, /^000201/); assert.ok(code.includes('0014br.gov.bcb.pix0114' + '12345678000195')); assert.ok(code.includes('540575.00')); assert.ok(code.includes('5914ESRO PAPELARIA')); assert.ok(code.includes('6009SAO PAULO')); assert.ok(code.includes('0508ESRO2001'));
+  const { crc16 } = await import('../src/pix.js'); assert.equal(code.slice(-4), crc16(code.slice(0, -4))); assert.equal(crc16('123456789'), '29B1');   // valor de referência do CRC-16/CCITT-FALSE
+  await api('DELETE', '/db/orders/pm4', undefined, adm);
+  if (antes) await api('PUT', '/db/settings/store', antes, adm); else await api('DELETE', '/db/settings/store', undefined, adm);
   assert.equal((await conta('GET', '/pedidos')).status, 401);
   const bad = await conta('PATCH', '/eu', { nome: 'Marina S. Lima', telefone: '99' }, cookie); assert.equal(bad.status, 422);
   const up = await conta('PATCH', '/eu', { nome: 'Marina S. Lima', telefone: '(21) 3333-4444' }, cookie); assert.equal((await up.json()).conta.telefone, '(21) 3333-4444');
@@ -374,4 +395,87 @@ test('Conta: tentativas demais bloqueiam o endereço e o cadastro tem limite por
   const lim = await call('/cadastro', novo({ email: 'cliente9@exemplo.com' }), '203.0.113.91'); assert.equal(lim.status, 429); assert.ok(Number(lim.headers.get('retry-after')) > 0);
   await pg.query(`DELETE FROM site_users WHERE email LIKE 'cliente%@exemplo.com'`);
   s.close();
+});
+
+/* ---------- Loja: ligação entre o site e o painel ---------- */
+const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36';
+const loja = (method, path, body, cookie, extra = {}) => fetch(base + '/api' + path, { method, headers: { ...CH, 'user-agent': UA, ...(cookie ? { cookie } : {}), ...extra }, body: body ? JSON.stringify(body) : undefined });
+const CAT7 = { n: '07', t: 'Papelaria personalizada', d: 'Produtos físicos em brochura', kind: 'fisico', items: [
+  { name: 'Agenda personalizada', min: 45, max: 85, on: true }, { name: 'Planner personalizado', min: 45, max: 90, on: true }, { name: 'Item desligado', min: 1, max: 2, on: false }] };
+
+test('Loja: o catálogo do site vem do painel e muda quando o painel muda', async () => {
+  const c = await login();
+  await api('PUT', '/db/catalog/c07', CAT7, c); await api('PUT', '/db/catalog/c02', { n: '02', t: 'Materiais pedagógicos', d: '', kind: 'digital', items: [{ name: 'Slides de formação', min: 35, max: 90, on: true }] }, c);
+  const r = await fetch(base + '/api/catalogo'); assert.equal(r.status, 200); assert.match(r.headers.get('cache-control'), /max-age=60/);
+  const { categorias } = await r.json(); assert.deepEqual(categorias.map(x => x.n), ['02', '07']);
+  assert.deepEqual(categorias[1].itens, [{ nome: 'Agenda personalizada', min: 45, max: 85 }, { nome: 'Planner personalizado', min: 45, max: 90 }]);   // item desligado não aparece
+  await api('PUT', '/db/catalog/c07', { ...CAT7, items: [{ name: 'Agenda personalizada', min: 50, max: 95, on: true }, CAT7.items[1]] }, c);
+  assert.deepEqual((await (await fetch(base + '/api/catalogo')).json()).categorias[1].itens[0], { nome: 'Agenda personalizada', min: 50, max: 95 });
+  await api('PUT', '/db/catalog/c07', CAT7, c);
+});
+
+test('Loja: pedido de orçamento do site é conferido e chega ao painel', async () => {
+  const ped = (over = {}) => ({ nome: 'Bianca Reis', telefone: '(11) 97777-1234', itens: [{ nome: 'Agenda personalizada', qtd: 2 }, { nome: 'planner personalizado', qtd: 1 }, { nome: 'Agenda personalizada', qtd: 1 }], obs: 'Capa verde\ncom nome', ...over });
+  assert.equal((await fetch(base + '/api/pedido', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ped()) })).status, 400);    // sem o cabeçalho próprio
+  assert.equal((await loja('POST', '/pedido', ped(), null, { origin: 'https://outro-site.example' })).status, 403);
+  assert.equal((await loja('POST', '/pedido', ped({ site: 'http://spam' }))).status, 400);
+  for (const [over, campo] of [[{ nome: '' }, 'nome'], [{ telefone: '123' }, 'telefone'], [{ itens: [] }, 'itens'], [{ itens: [{ nome: 'Produto inventado', qtd: 1 }] }, 'itens'],
+    [{ itens: [{ nome: 'Item desligado', qtd: 1 }] }, 'itens'], [{ itens: [{ nome: 'Agenda personalizada', qtd: 0 }] }, 'itens'], [{ itens: [{ nome: 'Agenda personalizada', qtd: 500 }] }, 'itens']]) {
+    const r = await loja('POST', '/pedido', ped(over)); assert.equal(r.status, 422, JSON.stringify(over)); assert.equal((await r.json()).campo, campo); }
+  const ok = await loja('POST', '/pedido', ped()); assert.equal(ok.status, 201);
+  const j = await ok.json(); assert.match(j.referencia, /^S[0-9A-Z]{7}$/); assert.deepEqual(j.estimativa, { min: 180, max: 345 }); assert.equal(j.nome, 'Bianca');
+  const lista = (await mcp('listar_pedidos_site', {})).data.pedidos; const p = lista.find(x => x.referencia === j.referencia); assert.ok(p);
+  assert.deepEqual(p.dados.itens.map(i => [i.nome, i.qtd]), [['Agenda personalizada', 3], ['Planner personalizado', 1]]);   // nomes do catálogo, quantidades somadas
+  assert.deepEqual(p.dados.cliente, { nome: 'Bianca Reis', telefone: '(11) 97777-1234', email: '' }); assert.equal(p.dados.obs, 'Capa verde com nome'); assert.equal(p.dados.clientId, null);
+});
+
+test('Loja: quem está com a conta aberta não digita os dados e vê o orçamento em "Minha conta"', async () => {
+  const cad = await conta('POST', '/cadastro', novo({ email: 'loja@exemplo.com', nome: 'Renata Lima', telefone: '11 96666-0000' })); assert.equal(cad.status, 201); const ck = cookieFrom(cad);
+  const ok = await loja('POST', '/pedido', { itens: [{ nome: 'Slides de formação', qtd: 1 }] }, ck); assert.equal(ok.status, 201); const ref = (await ok.json()).referencia;
+  const p = (await mcp('listar_pedidos_site', {})).data.pedidos.find(x => x.referencia === ref);
+  assert.equal(p.dados.cliente.nome, 'Renata Lima'); assert.equal(p.dados.cliente.email, 'loja@exemplo.com'); assert.match(p.dados.clientId, /^cli_site_/);
+  let meus = (await (await conta('GET', '/pedidos', null, ck)).json()).pedidos;
+  assert.deepEqual(meus.map(x => [x.numero, x.status, x.item]), [[ref, 'solicitado', 'Slides de formação']]);
+  await mcp('marcar_pedido_importado', { pedido_id: p.id });   // a ESRO importou: sai da lista de orçamentos pendentes
+  meus = (await (await conta('GET', '/pedidos', null, ck)).json()).pedidos; assert.equal(meus.length, 0);
+  // limite de pedidos por endereço (6 por hora nos testes)
+  const from = (i) => loja('POST', '/pedido', { nome: 'Teste', telefone: '11 95555-0000', itens: [{ nome: 'Agenda personalizada', qtd: 1 }] }, null, { 'cf-connecting-ip': '203.0.113.120' });
+  for (let i = 0; i < 6; i++) assert.equal((await from(i)).status, 201);
+  assert.equal((await from(7)).status, 429);
+  await conta('POST', '/excluir', { senha: 'caderno-azul-27' }, ck);
+});
+
+test('Loja: novidades por e-mail viram contato no painel, sem duplicar', async () => {
+  assert.equal((await loja('POST', '/novidades', { email: 'não é e-mail' })).status, 422);
+  assert.equal((await loja('POST', '/novidades', { email: 'x@exemplo.com', site: 'x' })).status, 400);
+  assert.equal((await loja('POST', '/novidades', { email: 'Ana.Clara@Exemplo.com' })).status, 200);
+  assert.equal((await loja('POST', '/novidades', { email: 'ana.clara@exemplo.com' })).status, 200);
+  const rows = (await pg.query(`SELECT data FROM panel_docs WHERE col='clients' AND deleted=false AND data->>'email'='ana.clara@exemplo.com'`)).rows;
+  assert.equal(rows.length, 1); assert.equal(rows[0].data.origin, 'site'); assert.equal(rows[0].data.news, true); assert.equal(rows[0].data.notes.length, 1);
+});
+
+test('Monitoramento: visitas sem cookies nem IP, funil do site, atendimento e Instagram', async () => {
+  assert.equal((await api('GET', '/monitor')).status, 401);
+  const v = (body, extra = {}) => loja('POST', '/v', body, null, extra);
+  const first = await v({ p: '/', n: true, r: 'https://www.instagram.com/esro.papelaria/' }); assert.equal(first.status, 204); assert.equal(first.headers.get('set-cookie'), null);
+  await v({ p: '/', n: true, r: '' }); await v({ p: '/entrar' }); await v({ p: '/caminho-estranho' }); await v({ p: '/', e: 'carrinho' }); await v({ p: '/', e: 'evento-inventado' });
+  await v({ p: '/', n: true }, { 'user-agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)' });     // robô: não conta
+  await v({ p: '/', n: true, r: base + '/entrar' }, { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0 Safari/537.36' });   // veio do próprio site: conta a visita, sem origem
+  await wait(); await wait();
+  const m = await (await api('GET', '/monitor?dias=7', undefined, await login())).json();
+  assert.equal(m.periodo.dias, 7); assert.equal(m.site.porDia.length, 7);
+  assert.equal(m.site.visitas, 3); assert.equal(m.site.paginas, 5); assert.equal(m.site.porDia.at(-1).visitas, 3);
+  assert.deepEqual(Object.fromEntries(m.site.origens.map(o => [o.chave, o.n])), { 'Instagram': 1, 'Direto ou link sem origem': 1 });
+  assert.deepEqual(Object.fromEntries(m.site.aparelhos.map(o => [o.chave, o.n])), { Celular: 2, Computador: 1 });
+  assert.deepEqual(Object.fromEntries(m.site.paginasVistas.map(o => [o.chave, o.n])), { '/': 3, '/entrar': 1, outra: 1 });
+  assert.equal(m.site.eventos.carrinho, 1); assert.ok(m.site.eventos.orcamento >= 2); assert.equal(m.site.eventos.novidades, 1); assert.ok(m.site.orcamentos.recebidos >= 2);
+  const stats = (await pg.query('SELECT * FROM site_stats')).rows; assert.ok(stats.every(r => Object.keys(r).join() === 'day,kind,key,n'));   // só contagens
+  // Instagram: perfil, publicações (link inseguro é descartado) e retrato do dia; sem permissão de alcance o resto funciona
+  assert.equal(m.instagram.configurado, true); assert.deepEqual(m.instagram.perfil, { usuario: 'esro.papelaria', nome: 'ESRO', seguidores: 321, seguindo: 100, publicacoes: 18 });
+  assert.deepEqual(m.instagram.posts.map(p => [p.tipo, p.curtidas, p.comentarios, p.link]), [['Foto', 42, 5, 'https://www.instagram.com/p/abc/'], ['Reels', 7, 0, null]]);
+  assert.equal(m.instagram.posts[0].legenda, 'Agenda 2027 com nome na capa'); assert.equal(m.instagram.ultimos28dias, null);
+  assert.deepEqual(m.instagram.seguidoresPorDia.map(x => x.seguidores), [321]);
+  assert.ok(!JSON.stringify(m).includes('ig-token'));
+  // Atendimento: mensagens por dia e tempo de resposta saem do que os webhooks gravaram
+  assert.ok(m.atendimento.conversas >= 1); assert.equal(m.atendimento.porDia.length, 7); assert.equal(typeof m.atendimento.naoLidas, 'number');
 });

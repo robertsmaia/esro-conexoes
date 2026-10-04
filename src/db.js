@@ -109,6 +109,72 @@ export function repo(db) {
     async userSetClient(id, clientId) { await q('UPDATE site_users SET client_id = $2, updated_at = now() WHERE id = $1', [id, clientId]); },
     async userTouchLogin(id) { await q('UPDATE site_users SET last_login_at = now() WHERE id = $1', [id]); },
     async userDelete(id) { await q('DELETE FROM site_users WHERE id = $1', [id]); },
+    // ----- loja: catálogo público, pedidos de orçamento do site e contatos de novidades -----
+    async docList(col) { return (await q('SELECT id, data FROM panel_docs WHERE col = $1 AND deleted = false ORDER BY id', [col])).rows; },
+    async clientByEmail(email) { return (await q(`SELECT id, data FROM panel_docs WHERE col = 'clients' AND deleted = false AND lower(data->>'email') = $1 LIMIT 1`, [email])).rows[0] || null; },
+    async siteOrdersOfClient(clientId) { return (await q(`SELECT id, ext_id, payload, received_at FROM site_orders WHERE imported = false AND payload->>'clientId' = $1 ORDER BY received_at DESC LIMIT 50`, [clientId])).rows; },
+    // ----- monitoramento -----
+    async statAdd(day, kind, key, n = 1) { await q(`INSERT INTO site_stats (day, kind, key, n) VALUES ($1,$2,$3,$4) ON CONFLICT (day, kind, key) DO UPDATE SET n = site_stats.n + EXCLUDED.n`, [day, kind, String(key).slice(0, 80), n]); },
+    async statsSince(day) { return (await q(`SELECT to_char(day, 'YYYY-MM-DD') AS day, kind, key, n FROM site_stats WHERE day >= $1 ORDER BY day`, [day])).rows; },
+    async socialSet(day, network, metric, value) { await q(`INSERT INTO social_stats (day, network, metric, value) VALUES ($1,$2,$3,$4) ON CONFLICT (day, network, metric) DO UPDATE SET value = EXCLUDED.value`, [day, network, metric, value]); },
+    async socialSince(day, network) { return (await q(`SELECT to_char(day, 'YYYY-MM-DD') AS day, metric, value FROM social_stats WHERE day >= $1 AND network = $2 ORDER BY day`, [day, network])).rows.map(r => ({ ...r, value: Number(r.value) })); },
+    async socialLast(network, metric) { const r = (await q(`SELECT to_char(day, 'YYYY-MM-DD') AS day, value FROM social_stats WHERE network = $1 AND metric = $2 ORDER BY day DESC LIMIT 1`, [network, metric])).rows[0]; return r ? { day: r.day, value: Number(r.value) } : null; },
+    async messagesPerDay(since) {   // mensagens por dia (horário de São Paulo), canal e direção
+      return (await q(`SELECT to_char((ts AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS day, channel, direction, count(*)::int AS n FROM messages WHERE ts >= $1 GROUP BY 1, 2, 3 ORDER BY 1`, [since])).rows;
+    },
+    async responseTime(since) {     // tempo entre a mensagem do cliente e a primeira resposta seguinte, na mesma conversa
+      const r = (await q(`WITH m AS (SELECT direction, ts, lag(direction) OVER w AS pd, lag(ts) OVER w AS pts FROM messages WHERE ts >= $1 WINDOW w AS (PARTITION BY contact_id ORDER BY ts))
+                          SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM ts - pts)) AS med, count(*)::int AS n FROM m WHERE direction = 'out' AND pd = 'in'`, [since])).rows[0];
+      return { n: r?.n || 0, medianaMin: r?.med == null ? null : Math.round(Number(r.med) / 60) };
+    },
+    async siteOrderCounts(since) { const r = (await q(`SELECT count(*)::int AS n, count(*) FILTER (WHERE imported)::int AS imp FROM site_orders WHERE received_at >= $1`, [since])).rows[0]; return { recebidos: r.n, importados: r.imp }; },
+    async userCounts(since) { const r = (await q(`SELECT count(*)::int AS total, count(*) FILTER (WHERE created_at >= $1)::int AS novas FROM site_users`, [since])).rows[0]; return r; },
+    // ----- loja: compra direta -----
+    // Número do próximo pedido. A reserva na tabela kv garante que duas compras ao mesmo tempo nunca recebam o mesmo número.
+    async nextOrderNum() {
+      let n = Number((await q(`SELECT COALESCE(max((data->>'num')::bigint), 1000) + 1 AS n FROM panel_docs WHERE col = 'orders' AND deleted = false AND (data->>'num') ~ '^[0-9]{1,9}$'`)).rows[0].n);
+      await q(`DELETE FROM kv WHERE key LIKE 'pedido-n:%' AND updated_at < now() - interval '1 day'`);
+      for (let t = 0; t < 50; t++, n++) if ((await q(`INSERT INTO kv (key, value) VALUES ($1, '1') ON CONFLICT (key) DO NOTHING RETURNING key`, ['pedido-n:' + n])).rows.length) return n;
+      throw new Error('não foi possível reservar o número do pedido');
+    },
+    async orderByPub(token) { return (await q(`SELECT id, data FROM panel_docs WHERE col = 'orders' AND deleted = false AND data->>'pub' = $1 LIMIT 1`, [token])).rows[0] || null; },
+    async clientByPhone(digits) { return (await q(`SELECT id, data FROM panel_docs WHERE col = 'clients' AND deleted = false AND regexp_replace(COALESCE(data->>'phone', ''), '[^0-9]', '', 'g') = $1 LIMIT 1`, [digits])).rows[0] || null; },
+    // Baixa de estoque sem risco de vender duas vezes a última unidade: só desconta se ainda houver a quantidade pedida.
+    async productTake(id, qty) {
+      const r = await q(`UPDATE panel_docs SET data = jsonb_set(data, '{stock}', to_jsonb((data->>'stock')::int - $2::int)), seq = nextval('panel_seq'), updated_at = now()
+                         WHERE col = 'products' AND id = $1 AND deleted = false AND jsonb_typeof(data->'stock') = 'number' AND (data->>'stock')::int >= $2::int RETURNING id`, [id, qty]);
+      return !!r.rows.length;
+    },
+    async productGive(id, qty) {
+      await q(`UPDATE panel_docs SET data = jsonb_set(data, '{stock}', to_jsonb((data->>'stock')::int + $2::int)), seq = nextval('panel_seq'), updated_at = now()
+               WHERE col = 'products' AND id = $1 AND deleted = false AND jsonb_typeof(data->'stock') = 'number'`, [id, qty]);
+    },
+    // Conta um uso do cupom; não passa do limite mesmo com dois pedidos ao mesmo tempo.
+    async couponUse(id) {
+      const r = await q(`UPDATE panel_docs SET data = jsonb_set(data, '{used}', to_jsonb(COALESCE(floor((data->>'used')::numeric), 0) + 1)), seq = nextval('panel_seq'), updated_at = now()
+                         WHERE col = 'coupons' AND id = $1 AND deleted = false AND (COALESCE(floor((data->>'max')::numeric), 0) <= 0 OR COALESCE(floor((data->>'used')::numeric), 0) < floor((data->>'max')::numeric)) RETURNING id`, [id]);
+      return !!r.rows.length;
+    },
+    async couponRelease(id) {   // devolve um uso do cupom quando a compra não chega a ser registrada
+      await q(`UPDATE panel_docs SET data = jsonb_set(data, '{used}', to_jsonb(GREATEST(COALESCE(floor((data->>'used')::numeric), 0) - 1, 0))), seq = nextval('panel_seq'), updated_at = now() WHERE col = 'coupons' AND id = $1 AND deleted = false`, [id]);
+    },
+    // Compras do site ainda sem nenhum pagamento, feitas há mais de N horas, com estoque reservado.
+    async staleShopOrders(hours) {
+      return (await q(`SELECT id, data FROM panel_docs WHERE col = 'orders' AND deleted = false AND data->>'origem' = 'loja' AND data->>'payS' = 'Aguardando' AND data->>'status' = 'novo'
+                       AND COALESCE(data->'loja'->>'estoque', '') = 'reservado' AND (data->>'at')::timestamptz < now() - ($1 || ' hours')::interval LIMIT 50`, [String(Math.floor(hours))])).rows;
+    },
+    async assetType(id) { return (await q('SELECT type FROM panel_assets WHERE id = $1', [id])).rows[0]?.type || null; },
+    // ----- usuários do painel -----
+    async puList() { return (await q('SELECT id, login, name, role, active, created_at, last_login_at FROM panel_users ORDER BY name')).rows; },
+    async puByLogin(login) { return (await q('SELECT * FROM panel_users WHERE login = $1', [login])).rows[0] || null; },
+    async puById(id) { return (await q('SELECT * FROM panel_users WHERE id = $1', [id])).rows[0] || null; },
+    async puCreate(u) { const r = await q('INSERT INTO panel_users (id, login, name, role, pass_hash) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (login) DO NOTHING RETURNING id', [u.id, u.login, u.name, u.role, u.passHash]); return !!r.rows.length; },
+    async puUpdate(id, { name, role, active }) {   // desativar ou mudar o nível encerra as sessões abertas
+      return (await q('UPDATE panel_users SET name = $2, role = $3, active = $4, session_ver = session_ver + CASE WHEN role <> $3 OR active <> $4 THEN 1 ELSE 0 END WHERE id = $1 RETURNING id, login, name, role, active', [id, name, role, active])).rows[0] || null;
+    },
+    async puSetPass(id, passHash) { return (await q('UPDATE panel_users SET pass_hash = $2, session_ver = session_ver + 1 WHERE id = $1 RETURNING *', [id, passHash])).rows[0] || null; },
+    async puTouch(id) { await q('UPDATE panel_users SET last_login_at = now() WHERE id = $1', [id]); },
+    async puDelete(id) { await q('DELETE FROM panel_users WHERE id = $1', [id]); },
     // ----- painel: arquivos -----
     async assetPut(a) { await q('INSERT INTO panel_assets (id, name, type, size, data) VALUES ($1, $2, $3, $4, $5)', [a.id, a.name, a.type, a.data.length, a.data]); },
     async assetGet(id) { const r = (await q('SELECT name, type, data FROM panel_assets WHERE id = $1', [id])).rows[0]; return r ? { name: r.name, type: r.type, data: Buffer.from(r.data) } : null; },
