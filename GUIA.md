@@ -203,6 +203,8 @@ Para evitar isso, o repositório tem uma rotina do GitHub (`.github/workflows/ma
 Até outubro de 2026 o `www` apontava para a hospedagem anterior (`CNAME custom-domains.chatgpt.site`). Para desfazer a mudança, troque o valor do CNAME `www` no registro.br de volta para esse endereço.
 
 ### 9.5 Atualizar o site
+As ilustrações dos produtos da vitrine ficam em `site/assets/produtos/` (uma por produto, em SVG). Para trocar uma delas por uma foto real, coloque a foto na mesma pasta e mude o endereço da imagem do produto em `site/index.html`.
+
 Troque os arquivos da pasta `site/` no GitHub e faça um novo deploy. O site não pode ter `<script>` embutido na página nem eventos como `onclick="..."` no HTML: o código fica em `site/site.js`. Essa regra faz parte da proteção do servidor.
 
 ### 9.6 Contas de clientes (login e cadastro no site)

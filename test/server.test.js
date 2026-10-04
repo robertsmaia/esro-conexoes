@@ -171,6 +171,10 @@ test('Site: página pública na raiz, com política de segurança e sem scripts 
   const html = await r.text(); assert.match(html, /ESRO/); assert.ok(!/<script>/.test(html)); assert.match(html, /href="\/painel"/);
   assert.match(r.headers.get('content-security-policy'), /script-src 'self';/);
   assert.equal((await fetch(base + '/site.js')).status, 200); assert.equal((await fetch(base + '/assets/esro-contato.jpg')).headers.get('content-type'), 'image/jpeg');
+  // Vitrine: cada produto tem a sua ilustração, servida como imagem e sem nada executável dentro
+  const pics = [...html.matchAll(/<img src="(assets\/produtos\/[\w-]+\.svg)" alt="([^"]+)"/g)]; assert.equal(pics.length, 8); assert.equal(new Set(pics.map(m => m[1])).size, 8);
+  for (const [, src] of pics) { const im = await fetch(base + '/' + src); assert.equal(im.status, 200); assert.match(im.headers.get('content-type'), /image\/svg\+xml/);
+    const svg = await im.text(); assert.ok(!/<script|<foreignObject|\son\w+=|href=/i.test(svg)); assert.ok(svg.length < 60000); }
   assert.match(await (await fetch(base + '/robots.txt')).text(), /Disallow: \/painel/);
   assert.equal((await fetch(base + '/../src/config.js')).status, 404); assert.equal((await fetch(base + '/.env')).status, 404);
 });
