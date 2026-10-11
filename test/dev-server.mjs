@@ -42,6 +42,10 @@ const fakeFetch = async (url, opts = {}) => { const u = String(url); const json 
   if (u.includes('api.mercadopago.com/checkout/preferences')) { const b = JSON.parse(opts.body); return json({ id: 'pref', init_point: 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=' + encodeURIComponent(b.external_reference) + '&valor=' + b.items[0].unit_price + '&volta=' + encodeURIComponent(b.back_urls.success) }, 201); }
   if (u.includes('api.mercadopago.com/v1/payments/')) { const p = payments[u.split('/').pop()]; return p ? json(p) : json({}, 404); }
   if (u.includes('api.brevo.com')) { outbox.push(JSON.parse(opts.body)); return json({ messageId: 'x' }, 201); }
+  if (u.includes('/comments')) return json(u.includes('/m0/') ? { data: [
+    { id: 'ic1', text: 'Amei a minha agenda, ficou perfeita! 😍', username: 'prof.renata', timestamp: new Date(Date.now() - 2 * 864e5).toISOString() },
+    { id: 'ic2', text: 'Qual o valor da agenda?', username: 'carla.m', timestamp: new Date(Date.now() - 2 * 864e5).toISOString() },
+    { id: 'ic3', text: 'Que capricho! Parabéns pelo trabalho 👏', username: 'tia.duda', timestamp: new Date(Date.now() - 864e5).toISOString() }] } : { data: [] });
   if (u.includes('/me/insights')) return json({ error: { code: 10 } }, 403);
   if (u.includes('/me/media')) return json(IG.media);
   if (u.includes('/me?')) return json(IG.me);

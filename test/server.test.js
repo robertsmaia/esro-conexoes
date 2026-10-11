@@ -18,6 +18,12 @@ const fakeFetch = async (url, opts = {}) => {
   if (url.includes('graph.facebook.com') && JSON.parse(opts.body).to === '5511900000000') return json({ error: { code: 131047, message: 'Re-engagement message' } }, 400);
   if (url.includes('graph.facebook.com')) return json({ messages: [{ id: 'wamid.OUT1' }] });
   if (url.includes('graph.instagram.com') && url.includes('/messages')) return json({ recipient_id: 'IGSID1', message_id: 'mid.OUT1' });
+  if (url.includes('graph.instagram.com') && url.includes('/m1/comments')) return json({ data: [
+    { id: 'c1', text: 'Amei a agenda, ficou linda demais! 😍', username: 'prof.ana', timestamp: '2026-10-02T12:00:00+0000' },
+    { id: 'c2', text: 'Quanto custa a agenda?', username: 'joana', timestamp: '2026-10-02T13:00:00+0000' },
+    { id: 'c3', text: 'Meu pedido atrasou, ainda não chegou', username: 'bia', timestamp: '2026-10-02T14:00:00+0000' },
+    { id: 'c4', text: 'Obrigada pelo carinho!', username: 'esro.papelaria', timestamp: '2026-10-02T15:00:00+0000' },
+    { id: 'c5', text: 'Que capricho, parabéns pelo trabalho 👏', username: 'mari.prof', timestamp: '2026-10-03T12:00:00+0000' }] });
   if (url.includes('graph.instagram.com') && url.includes('/me/insights')) return json({ error: { code: 10, message: 'sem permissão' } }, 403);
   if (url.includes('graph.instagram.com') && url.includes('/me/media')) return json({ data: [
     { id: 'm1', caption: 'Agenda 2027\ncom nome na capa', media_type: 'IMAGE', permalink: 'https://www.instagram.com/p/abc/', timestamp: '2026-10-01T12:00:00+0000', like_count: 42, comments_count: 5 },
@@ -318,7 +324,7 @@ test('Conta: o cliente só vê os próprios pedidos; dados alterados vão para a
   const { pedidos } = await (await conta('GET', '/pedidos', null, cookie)).json();
   assert.equal(pedidos.length, 1);
   // Sem chave PIX cadastrada no painel não há código de pagamento; "sinal pago" sem valor informado conta como metade.
-  assert.deepEqual(pedidos[0], { numero: 2001, data: '2026-10-01T12:00:00.000Z', item: 'Planner personalizado', quantidade: 2, valor: 150, pago: 75, falta: 75, status: 'producao', statusNome: 'Em produção', entrega: '2026-10-20', pagamento: 'Sinal pago', pix: null, acompanhar: null, rastreio: null });
+  assert.deepEqual(pedidos[0], { numero: 2001, data: '2026-10-01T12:00:00.000Z', item: 'Planner personalizado', quantidade: 2, valor: 150, pago: 75, falta: 75, status: 'producao', statusNome: 'Em produção', entrega: '2026-10-20', pagamento: 'Sinal pago', pix: null, acompanhar: null, rastreio: null, depoimento: null });
   // Com a chave PIX cadastrada, o cliente recebe o "copia e cola" só do valor que falta, com o código de conferência (CRC) correto.
   await api('PUT', '/db/settings/store', { pixType: 'cpf', pixKey: '12.345.678/0001-95', pixName: 'ESRO Papelaria', pixCity: 'São Paulo' }, adm);
   await api('PUT', '/db/orders/pm4', { num: 2004, at: '2026-10-04T12:00:00.000Z', client: 'Marina Souza', clientId: row.client_id, item: 'Agenda', value: 60, status: 'concluido', payS: 'Pago', pays: [{ at: '2026-10-04T12:00:00.000Z', value: 60 }] }, adm);
@@ -489,4 +495,50 @@ test('Loja: preço por quantidade e variações vêm do painel e são conferidos
   assert.deepEqual([await sub(9, 'Simples'), await sub(10, 'Simples'), await sub(12, 'Simples'), await sub(10, 'Dura'), await sub(50, 'Simples'), await sub(60, 'Dura')], [162, 150, 180, 320, 650, 1800]);
   assert.equal((await site('POST', '/frete', { itens: [{ id: 'prd_bloco_teste', qtd: 3, vars: { Capa: 'Ouro' } }] })).status, 422);
   await api('DELETE', '/db/products/prd_bloco_teste', undefined, c);
+});
+
+test('Depoimentos: o cliente escreve pela conta só em pedido próprio e enviado; o painel sugere elogios do Instagram', async () => {
+  const ip = { 'cf-connecting-ip': '198.51.100.31' };
+  const cad = await conta('POST', '/cadastro', novo({ email: 'depo@exemplo.com', telefone: '11 97777-1234' }), null, ip); assert.equal(cad.status, 201);
+  const cookie = cookieFrom(cad);
+  const row = (await pg.query(`SELECT * FROM site_users WHERE email = 'depo@exemplo.com'`)).rows[0];
+  const adm = await login();
+  await api('PUT', '/db/orders/pd1', { num: 2101, at: '2026-10-05T12:00:00.000Z', client: 'Marina Souza', clientId: row.client_id, item: 'Caderno personalizado', value: 42, status: 'concluido' }, adm);
+  await api('PUT', '/db/orders/pd2', { num: 2102, at: '2026-10-06T12:00:00.000Z', client: 'Marina Souza', clientId: row.client_id, item: 'Agenda', value: 59.9, status: 'producao' }, adm);
+  await api('PUT', '/db/orders/pd3', { num: 2103, at: '2026-10-06T12:00:00.000Z', client: 'Outra', clientId: 'cli_outra', item: 'Agenda', value: 59.9, status: 'concluido' }, adm);
+  const situ = async () => Object.fromEntries((await (await conta('GET', '/pedidos', null, cookie)).json()).pedidos.map(p => [p.numero, p.depoimento]));
+  let s = await situ(); assert.equal(s[2101], 'pode'); assert.equal(s[2102], null);
+  const dep = { numero: 2101, nome: 'Marina S.', cidade: 'Osasco', texto: 'O caderno ficou perfeito, a minha filha amou o nome na capa.', aceite: true };
+  assert.equal((await conta('POST', '/depoimentos', dep)).status, 401);                                     // sem login
+  assert.equal((await conta('POST', '/depoimentos', { ...dep, numero: 2103 }, cookie)).status, 404);        // pedido de outra pessoa
+  assert.equal((await conta('POST', '/depoimentos', { ...dep, numero: 2102 }, cookie)).status, 409);        // ainda em produção
+  assert.equal((await conta('POST', '/depoimentos', { ...dep, aceite: false }, cookie)).status, 422);
+  assert.equal((await conta('POST', '/depoimentos', dep, cookie)).status, 201);
+  assert.equal((await conta('POST', '/depoimentos', dep, cookie)).status, 409);
+  const d = (await pg.query(`SELECT data FROM panel_docs WHERE col = 'depoimentos' AND id = 'dep_pd1'`)).rows[0].data;
+  assert.deepEqual([d.status, d.origem, d.verificado, d.autorizado, d.pedido, d.clientId], ['pendente', 'conta', true, true, 2101, row.client_id]);
+  s = await situ(); assert.equal(s[2101], 'em revisão');
+  await api('PATCH', '/db/depoimentos/dep_pd1', { status: 'aprovado' }, adm);
+  s = await situ(); assert.equal(s[2101], 'publicado');
+  const pub = (await (await fetch(base + '/api/depoimentos')).json()).depoimentos.find(x => x.nome === 'Marina S.');
+  assert.equal(pub.origem, 'Pelo site'); assert.equal(pub.verificado, true);
+
+  // Instagram: só elogios, sem perguntas, reclamações ou comentários da própria ESRO
+  assert.equal((await fetch(base + '/painel/api/depoimentos/instagram', { headers: H })).status, 401);
+  let ig = await (await api('GET', '/depoimentos/instagram?atualizar=1', undefined, adm)).json();
+  assert.equal(ig.configurado, true); assert.equal(ig.erro, null);
+  assert.deepEqual(ig.comentarios.map(c => c.id).sort(), ['c1', 'c5']);
+  assert.equal(ig.comentarios.find(c => c.id === 'c1').post, 'https://www.instagram.com/p/abc/');
+  // Comentário que chega pelo aviso automático (webhook assinado) também entra
+  const wh = JSON.stringify({ object: 'instagram', entry: [{ id: '1', time: 1, changes: [{ field: 'comments', value: { id: 'c9', text: 'Lindo demais, recomendo!', from: { id: '9', username: 'leticia' }, media: { id: 'm1' } } }] }] });
+  assert.equal((await fetch(base + '/webhooks/instagram', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign('ig-secret', wh) }, body: wh })).status, 200);
+  await new Promise(r => setTimeout(r, 80));
+  ig = await (await api('GET', '/depoimentos/instagram', undefined, adm)).json();
+  assert.ok(ig.comentarios.some(c => c.id === 'c9' && c.usuario === 'leticia'));
+  // Ignorar e usar como depoimento tiram o comentário da lista
+  assert.equal((await api('POST', '/depoimentos/instagram/c5/ignorar', {}, adm)).status, 200);
+  await api('PUT', '/db/depoimentos/ig1', { nome: 'Ana', texto: 'Amei a agenda, ficou linda demais! 😍', origem: 'instagram', igComentario: 'c1', autorizado: true, status: 'aprovado', at: '2026-10-07T12:00:00.000Z' }, adm);
+  ig = await (await api('GET', '/depoimentos/instagram', undefined, adm)).json();
+  assert.deepEqual(ig.comentarios.map(c => c.id), ['c9']);
+  assert.equal((await api('POST', '/depoimentos/instagram/x%20y/ignorar', {}, adm)).status, 422);
 });

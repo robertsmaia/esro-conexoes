@@ -67,7 +67,7 @@ export function checkPassword(v, email, campo = 'senha') {
   return { value: s };
 }
 
-export function makeAccounts({ cfg, repo, log = console, guard, clientIp, counter, mailer }) {
+export function makeAccounts({ cfg, repo, log = console, guard, clientIp, counter, mailer, depo }) {
   const sessKey = crypto.createHmac('sha256', cfg.mcpSecret).update('esro-conta-cliente').digest();
   const signups = counter(3600e3), signupsDay = counter(24 * 3600e3), emailFails = counter(15 * 60e3), forgotIp = counter(3600e3), forgotMail = counter(3600e3);
   const MAX_SIGNUPS_IP = cfg.accounts?.signupsPerHour || 5, MAX_SIGNUPS_DAY = cfg.accounts?.signupsPerDay || 300, MAX_EMAIL_FAILS = 10;
@@ -207,18 +207,21 @@ export function makeAccounts({ cfg, repo, log = console, guard, clientIp, counte
     setCookie(req, res, '', 0); res.status(204).end();
   });
 
+  depo?.contaRoutes(api);   // "Deixar depoimento" nos pedidos enviados ou concluídos
+
   // Pedidos da ficha ligada à conta (os que a ESRO registrou no painel para este cliente).
   api.get('/pedidos', async (req, res) => {
     const rows = req.user.client_id ? await repo.ordersOfClient(req.user.client_id) : [];
     const settings = rows.length ? (await repo.docGet('settings', 'store')) || {} : {};
-    const pedidos = rows.map(({ data: o }) => {
+    const deps = new Map(depo ? await Promise.all(rows.map(async r => [r.id, await depo.situacaoDoPedido(r)])) : []);
+    const pedidos = rows.map(({ id, data: o }) => {
       const falta = dueOf(o), aberto = STATUS[o.status] !== undefined || !o.status;   // pedido cancelado ou de situação desconhecida não gera cobrança
       // PIX "copia e cola" do valor que falta: o cliente paga pelo app do banco e a ESRO confirma o recebimento no painel.
       const pix = falta > 0 && aberto && o.pay !== 'Mercado Pago' ? pixPayload(settings, falta, 'Pedido ' + (o.num ?? ''), 'ESRO' + (o.num ?? '')) : null;
       return { numero: o.num ?? null, data: o.at || null, item: String(o.item || 'Pedido'), quantidade: Number(o.qty) || 1, valor: Number(o.value) || 0, pago: paidOf(o), falta,
         status: STATUS[o.status] ? o.status : 'novo', statusNome: STATUS[o.status] || STATUS.novo, entrega: o.due || null, pagamento: ['Aguardando', 'Sinal pago', 'Pago'].includes(o.payS) ? o.payS : 'Aguardando',
         pix: pix ? { codigo: pix, valor: falta, favorecido: String(settings.pixName || 'ESRO Papelaria').slice(0, 60) } : null,
-        acompanhar: /^[\w-]{40,50}$/.test(String(o.pub || '')) ? '/pedido/' + o.pub : null, rastreio: o.track ? String(o.track).slice(0, 60) : null }; })
+        acompanhar: /^[\w-]{40,50}$/.test(String(o.pub || '')) ? '/pedido/' + o.pub : null, rastreio: o.track ? String(o.track).slice(0, 60) : null, depoimento: deps.get(id) || null }; })
       .sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
     // Orçamentos pedidos pelo site que a ESRO ainda não transformou em pedido.
     const pend = req.user.client_id ? await repo.siteOrdersOfClient(req.user.client_id) : [];

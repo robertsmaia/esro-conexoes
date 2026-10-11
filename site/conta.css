@@ -155,3 +155,16 @@ a:focus-visible,button:focus-visible,input[type=checkbox]:focus-visible{outline:
 .pix-actions{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin-top:10px}
 .pix-said{font-size:.88rem;color:var(--ok);font-weight:600}
 @media(max-width:560px){.pix-box{grid-template-columns:1fr;justify-items:center}.pix-side{width:100%}}
+/* Depoimento nos pedidos da conta */
+.dep{grid-column:1/-1;margin-top:6px}
+.dep-box{margin-top:14px;padding:4px 20px 20px;border:1px solid var(--line);border-radius:16px;background:var(--cream)}
+.dep-box[hidden]{display:none}
+.dep-how{margin:16px 0 0;font-size:.92rem;color:var(--muted)}
+.dep-box .field{margin-top:16px}
+.dep-box .check{margin-top:18px}
+.line textarea{flex:1;min-width:0;width:100%;min-height:104px;resize:vertical;border:1.5px solid var(--rule);border-radius:12px;background:var(--paper);padding:10px 12px;font:inherit;font-size:1rem;outline:0;margin-top:8px}
+.line textarea:focus{border-color:var(--brown);box-shadow:0 0 0 1px var(--brown)}
+.line textarea[aria-invalid=true]{border-color:var(--danger)}
+.dep-said{margin:4px 0 0;font-size:.9rem;color:var(--muted)}
+.dep-said.good{color:var(--ok);font-weight:600}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}

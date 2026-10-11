@@ -274,7 +274,7 @@ Passo a passo nas seções 13 e 14 do **PASSO-A-PASSO-LOJA.md**. Resumo técnico
 - Produto ganhou `tiers` (`[{min, price}]`, preço por quantidade), `custo` (também por opção) e `slugsAntigos`; `pub()` expõe `faixasQtd` e nunca o custo. `checkItems` soma a quantidade do mesmo produto no carrinho e aplica o maior degrau antes das opções.
 - `settings/loja` ganhou `taxaPct` e `margemMinPct`. Os itens dos pedidos novos guardam o custo unitário para a margem.
 - Migração única `migracao:precos-2026-10` (tabela `kv`) em `src/precos.js`: atualiza produtos, catálogo c07, prazo e cria "Material pronto" desligado. Não toca em pedidos.
-- Depoimentos: coleção `depoimentos` do painel; `GET /api/depoimentos` (só aprovados e autorizados), `POST /api/depoimentos` (exige o link secreto do pedido e a autorização; um por pedido; 6 por hora por endereço) e `GET /api/depoimentos/pedido/<código>`.
+- Depoimentos: coleção `depoimentos` do painel; `GET /api/depoimentos` (só aprovados e autorizados), `POST /api/depoimentos` (exige o link secreto do pedido e a autorização; um por pedido; 6 por hora por endereço) e `GET /api/depoimentos/pedido/<código>`; pela conta, `POST /api/conta/depoimentos` (só pedidos da ficha do cliente, enviados ou concluídos). Instagram: `GET /painel/api/depoimentos/instagram` lê os comentários (permissão `instagram_business_manage_comments`) e o webhook guarda os do campo `comments`; só os elogios são sugeridos.
 
 ## 10. Segurança
 

@@ -36,7 +36,7 @@ export const SITE_CSP = "default-src 'self'; script-src 'self'; style-src 'self'
 const scrypt = (pw, salt) => new Promise((res, rej) => crypto.scrypt(pw, salt, 32, (e, k) => e ? rej(e) : res(k)));
 const cookieOf = (req) => { for (const part of String(req.headers.cookie || '').split(';')) { const i = part.indexOf('='); if (i > 0 && part.slice(0, i).trim() === COOKIE) return part.slice(i + 1).trim(); } return ''; };
 
-export function mountPanel(app, { cfg, repo, tools, log, guard, accounts, store, shop }) {
+export function mountPanel(app, { cfg, repo, tools, log, guard, accounts, store, shop, depo }) {
   const password = cfg.panel?.password || '';
   const enabled = password.length >= 10;
   const salt = crypto.createHash('sha256').update('esro-painel|' + cfg.mcpSecret).digest();
@@ -211,6 +211,7 @@ export function mountPanel(app, { cfg, repo, tools, log, guard, accounts, store,
   });
   api.use('/contas', can('contas')); accounts?.adminRoutes(api);                      // contas de clientes do site: link de nova senha e união de fichas
   api.use(['/monitor', '/redes'], can('monitor')); store?.adminRoutes(api);           // números do site, do atendimento e das redes para a tela Monitoramento
+  api.use('/depoimentos', (req, res, next) => allows(perm(req.user).write, 'depoimentos') ? next() : res.status(403).json({ erro: 'O seu nível de acesso não permite esta ação.' })); depo?.adminRoutes(api);   // sugestões de depoimento vindas do Instagram
   api.use('/loja', can('loja')); shop?.adminRoutes(api);                              // situação das integrações da loja e e-mail de teste
   app.use('/painel/api', api);
 

@@ -12,7 +12,7 @@ import { makeAccounts } from './accounts.js';
 import { makeStore } from './store.js';
 import { makeShop } from './shop.js';
 import { makeMailer } from './mail.js';
-import { makeDepoimentos } from './depoimentos.js';
+import { makeDepoimentos, parseInstagramComments } from './depoimentos.js';
 
 const safeEq = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y); };
 
@@ -70,13 +70,13 @@ export function createApp({ cfg, repo, fetchImpl = fetch, log = console }) {
   app.get('/', (_req, res) => { if (!hasSite) return res.json(status()); siteHeaders(res); res.sendFile(path.join(SITE_DIR, 'index.html')); });
   // Contas de clientes do site: telas /entrar e /conta e as rotas em /api/conta.
   const mailer = makeMailer(cfg, fetchImpl, log);   // e-mails automáticos (só envia se EMAIL_PROVIDER, EMAIL_API_KEY e EMAIL_FROM estiverem cadastrados)
-  const accounts = makeAccounts({ cfg, repo, log, guard, clientIp, counter, mailer });
+  const depo = makeDepoimentos({ cfg, repo, log, clientIp, counter, mailer, fetchImpl });   // depoimentos de clientes (só aparecem os aprovados no painel)
+  const accounts = makeAccounts({ cfg, repo, log, guard, clientIp, counter, mailer, depo });
   if (hasSite) accounts.mount(app, siteHeaders);
   // Compra direta: produtos, frete, cupons, pagamento, acompanhamento do pedido e lista de produtos para outros canais.
   const direct = makeShop({ cfg, repo, log, clientIp, counter, accounts, mailer, fetchImpl });
   if (hasSite) direct.mount(app, siteHeaders);
   // Loja: catálogo público, pedido de orçamento, novidades e contagem de visitas (/api/...), mais os números do Monitoramento.
-  const depo = makeDepoimentos({ cfg, repo, log, clientIp, counter, mailer });   // depoimentos de clientes (só aparecem os aprovados no painel)
   const shop = makeStore({ cfg, repo, log, clientIp, counter, accounts, shop: direct, depo, mailer, fetchImpl });
   if (hasSite) shop.mount(app);
   if (hasSite) app.use(express.static(SITE_DIR, { index: false, redirect: false, setHeaders: siteHeaders }));
@@ -120,6 +120,9 @@ export function createApp({ cfg, repo, fetchImpl = fetch, log = console }) {
     res.sendStatus(200);
     try { await store(parseInstagram(req.body).messages, (id) => instagramProfile(cfg, repo, id, fetchImpl)); }
     catch (e) { log.error('[instagram] falha ao processar webhook:', e); }
+    // Comentários nas publicações (se o campo "comments" estiver assinado no app da Meta): vão para as sugestões de depoimento do painel.
+    try { await depo.guardarComentarios(parseInstagramComments(req.body)); }
+    catch (e) { log.error('[instagram] falha ao guardar comentários:', e?.message || e); }
   });
 
   // Pedidos do site: o checkout envia um POST com o cabeçalho x-esro-token
@@ -152,7 +155,7 @@ export function createApp({ cfg, repo, fetchImpl = fetch, log = console }) {
   app.all('/mcp/:secret', mcpAuth, (_req, res) => res.status(405).set('Allow', 'POST').json({ jsonrpc: '2.0', error: { code: -32000, message: 'Use POST.' }, id: null }));
 
   // Painel administrativo (login próprio) em /painel
-  mountPanel(app, { cfg, repo, tools, log, guard, accounts, store: shop, shop: direct });
+  mountPanel(app, { cfg, repo, tools, log, guard, accounts, store: shop, shop: direct, depo });
   app.locals.store = shop; app.locals.shop = direct;
 
   // Qualquer outro caminho: resposta curta, sem detalhes internos.

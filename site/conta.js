@@ -192,8 +192,55 @@
       if (o.acompanhar) { var more = el('a', 'link', 'Ver detalhes do pedido'); more.href = o.acompanhar; foot.appendChild(more); }
       li.appendChild(foot);
       if (o.pix && o.pix.codigo) li.appendChild(pixBox(o));
+      if (o.depoimento) li.appendChild(depBox(o));
       ul.appendChild(li);
     });
+  }
+
+  /* Depoimento: aparece nos pedidos enviados ou concluídos; fica em revisão até a ESRO aprovar. */
+  var depSeq = 0, meNome = '';
+  function depBox(o) {
+    var wrap = el('div', 'dep');
+    if (o.depoimento !== 'pode') { wrap.appendChild(el('p', 'dep-said', o.depoimento === 'publicado' ? 'Seu depoimento sobre este pedido está no site. Obrigada!' : 'Recebemos o seu depoimento. Ele aparece no site depois que a ESRO revisar.')); return wrap; }
+    var id = 'dep-' + (++depSeq), btn = el('button', 'btn secondary small', 'Deixar depoimento'); btn.type = 'button'; btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', id);
+    var f = document.createElement('form'); f.className = 'dep-box'; f.id = id; f.hidden = true; f.noValidate = true;
+    f.appendChild(el('p', 'dep-how', 'Gostou do seu pedido? Conte como foi. O seu depoimento ajuda outras professoras e famílias a conhecer a ESRO.'));
+    function field(name, label, tag, extra) {
+      var lab = el('label', 'field'), sp = el('span', 'lab', label); lab.appendChild(sp);
+      if (extra) sp.appendChild(el('small', null, ' ' + extra));
+      var ln = el('span', 'line'), inp = document.createElement(tag); inp.name = name; inp.id = id + '-' + name; inp.setAttribute('aria-describedby', inp.id + '-err');
+      ln.appendChild(inp); lab.appendChild(ln); var err = el('small', 'err'); err.id = inp.id + '-err'; err.hidden = true; lab.appendChild(err); f.appendChild(lab); return inp;
+    }
+    var nome = field('nome', 'Como o seu nome deve aparecer', 'input'); nome.maxLength = 40; nome.autocomplete = 'off';
+    var nm = meNome.trim().split(/\s+/); nome.value = nm[0] ? nm[0] + (nm.length > 1 ? ' ' + nm[nm.length - 1].charAt(0).toUpperCase() + '.' : '') : '';
+    var cidade = field('cidade', 'Cidade', 'input', 'opcional'); cidade.maxLength = 40; cidade.autocomplete = 'address-level2';
+    var texto = field('texto', 'Seu depoimento', 'textarea'); texto.maxLength = 600; texto.rows = 4;
+    var ck = el('label', 'check'), box = document.createElement('input'); box.type = 'checkbox'; box.name = 'aceite'; box.id = id + '-aceite'; box.setAttribute('aria-describedby', id + '-aceite-err');
+    ck.appendChild(box); ck.appendChild(el('span', null, 'Autorizo a ESRO a publicar este depoimento no site e nas redes sociais, com o nome e a cidade que escrevi acima.')); f.appendChild(ck);
+    var ckErr = el('small', 'err'); ckErr.id = id + '-aceite-err'; ckErr.hidden = true; f.appendChild(ckErr);
+    box.addEventListener('change', function () { if (box.checked) ckErr.hidden = true; });
+    var hp = document.createElement('input'); hp.type = 'text'; hp.name = 'site'; hp.tabIndex = -1; hp.autocomplete = 'off'; hp.className = 'hp'; hp.setAttribute('aria-hidden', 'true'); f.appendChild(hp);
+    var msg = el('p', 'msg'); msg.setAttribute('role', 'status'); msg.hidden = true; f.appendChild(msg);
+    var act = el('div', 'actions'), send = el('button', 'btn primary', 'Enviar depoimento'); send.type = 'submit'; act.appendChild(send); f.appendChild(act);
+    function bad(inp, errEl, t) { errEl.textContent = t; errEl.hidden = false; if (inp) { inp.setAttribute('aria-invalid', 'true'); inp.focus(); } }
+    f.addEventListener('submit', async function (ev) {
+      ev.preventDefault(); $$('.err', f).forEach(function (b) { b.hidden = true; }); $$('[aria-invalid]', f).forEach(function (i) { i.removeAttribute('aria-invalid'); }); msg.hidden = true;
+      if (nome.value.trim().length < 2) return bad(nome, $('#' + nome.id + '-err'), 'Escreva como o seu nome deve aparecer.');
+      if (texto.value.trim().length < 20) return bad(texto, $('#' + texto.id + '-err'), 'Conte um pouco mais: pelo menos 20 letras.');
+      if (!box.checked) return bad(box, ckErr, 'Para publicar, marque a autorização.');
+      send.disabled = true;
+      try {
+        await call('POST', '/depoimentos', { numero: o.numero, nome: nome.value.trim(), cidade: cidade.value.trim(), texto: texto.value.trim(), aceite: true, site: hp.value });
+        wrap.textContent = ''; var ok = el('p', 'dep-said good', 'Recebemos o seu depoimento. Ele aparece no site depois que a ESRO revisar. Obrigada!'); ok.setAttribute('role', 'status'); wrap.appendChild(ok); ok.tabIndex = -1; ok.focus();
+      } catch (e) {
+        var map = { nome: [nome, nome.id + '-err'], texto: [texto, texto.id + '-err'], aceite: [box, ckErr.id] };
+        if (e.campo && map[e.campo]) bad(map[e.campo][0], $('#' + map[e.campo][1]), e.message);
+        else { msg.className = 'msg bad'; msg.textContent = e.message || 'Não foi possível enviar agora. Tente de novo.'; msg.hidden = false; }
+      } finally { send.disabled = false; }
+    });
+    btn.addEventListener('click', function () { var open = f.hidden; f.hidden = !open; btn.setAttribute('aria-expanded', String(open)); if (open) texto.focus(); });
+    wrap.appendChild(btn); wrap.appendChild(f);
+    return wrap;
   }
 
   /* Pagamento por PIX: mostra o QR e o "copia e cola" do valor que falta. Quem confirma o recebimento é a ESRO. */
@@ -236,7 +283,7 @@
     catch (e) { if (e.status === 401) { location.replace('/entrar'); return; } $('#loading').textContent = e.message; return; }
     var formData = $('#form-dados'), formPass = $('#form-senha'), formDel = $('#form-excluir');
     function fill(c) {
-      me = c; $('#hello').textContent = 'Olá, ' + c.nome.split(' ')[0];
+      me = c; meNome = c.nome || ''; $('#hello').textContent = 'Olá, ' + c.nome.split(' ')[0];
       var d = day(c.desde); $('#since').textContent = d ? 'Cliente ESRO desde ' + d : '';
       formData.elements.nome.value = c.nome; formData.elements.telefone.value = c.telefone; $('#me-email').value = c.email; $('#pw-user').value = c.email;
     }

@@ -861,6 +861,11 @@ function okProducao(o,to,nova){ const v={...o,...(nova||{})}; if(to!=='producao'
 const ordOf=p=>p.ord==null||p.ord===''||isNaN(+p.ord)?999:+p.ord;
 const prodList=()=>[...D.products].sort((a,b)=>ordOf(a)-ordOf(b)||String(a.name).localeCompare(String(b.name),'pt-BR'));
 const siteBase=()=>location.origin;
+const IGC={data:null,loading:false,err:''};
+async function loadIgComments(force){ if(!window.ESRO_API||IGC.loading) return; IGC.loading=true; IGC.err=''; if(S.view==='loja') render();
+  try{ IGC.data=await window.ESRO_API('GET','/depoimentos/instagram'+(force?'?atualizar=1':'')); }catch(e){ IGC.err=apiErr(e,'Não foi possível ler os comentários agora.'); }
+  IGC.loading=false; if(S.view==='loja'&&S.lojaTab==='depoimentos'&&!$('#dpForm')) render(); }
+const IG_PEDIDO=u=>`Oi${u?' @'+u:''}! Que alegria ler o seu comentário 💛 Podemos publicar as suas palavras na seção de depoimentos do site da ESRO? Se puder, me diga também como prefere que o seu nome apareça (por exemplo, Ana S.) e a sua cidade. Obrigada!`;
 async function loadLojaStatus(){ if(!window.ESRO_API||LJ.loading) return; LJ.loading=true; LJ.err='';
   try{ LJ.status=await window.ESRO_API('GET','/loja/status'); }catch(e){ LJ.err=apiErr(e,'Não foi possível ler a situação das integrações agora.'); }
   LJ.loading=false; if(S.view==='loja'&&S.lojaTab==='integr') render(); }
@@ -885,13 +890,13 @@ function vLoja(){
       :emptyState('ticket-percent','Nenhum cupom ainda','Crie um cupom de boas-vindas ou de frete grátis para divulgar no Instagram.')}</section>`; }
   if(S.lojaTab==='depoimentos'){ const w2=writes('depoimentos'), ord=[...D.depoimentos].sort((a,b)=>({pendente:0,aprovado:1,oculto:2}[a.status]??3)-({pendente:0,aprovado:1,oculto:2}[b.status]??3)||String(b.at||'').localeCompare(String(a.at||'')));
     const ST={pendente:['b-warn','Aguardando aprovação'],aprovado:['b-ok','No site'],oculto:['b-neutral','Oculto']}, ORI={site:'Pela página do pedido',whatsapp:'WhatsApp',instagram:'Instagram',pessoalmente:'Pessoalmente',email:'E-mail'};
-    return head+`<section class="card"><div class="card-top"><div><h3>Depoimentos de clientes</h3><p class="hint">Só os aprovados aparecem na página inicial do site (os 6 mais recentes). Sem nenhum aprovado, a seção fica escondida. O cliente escreve pela página do pedido depois que ele é marcado como “Enviado”; depoimentos recebidos pelo WhatsApp ou Instagram você cadastra aqui, com a autorização da pessoa.</p></div>${w2?'<button class="btn primary" data-dpnew><i data-lucide="plus"></i>Cadastrar depoimento</button>':''}</div>
+    return head+`<section class="card"><div class="card-top"><div><h3>Depoimentos de clientes</h3><p class="hint">Só os aprovados aparecem na página inicial do site (os 6 mais recentes). Sem nenhum aprovado, a seção fica escondida. O cliente escreve pela página do pedido ou pela área Minha conta do site depois que o pedido é marcado como “Enviado”; depoimentos recebidos pelo WhatsApp ou Instagram você cadastra aqui, com a autorização da pessoa.</p></div>${w2?'<button class="btn primary" data-dpnew><i data-lucide="plus"></i>Cadastrar depoimento</button>':''}</div>
       ${ord.length?`<div class="list">${ord.map(d=>`<div class="row prow dep-row"><span class="pthumb"><i data-lucide="quote"></i></span><div class="grow"><b>${esc(d.nome)}${d.cidade?' · '+esc(d.cidade):''}</b><small style="white-space:normal">“${esc(d.texto)}”</small>
         <small>${esc(ORI[d.origem]||'')}${d.pedido?` · pedido #${esc(d.pedido)}`:''}${d.produto?' · '+esc(d.produto):''} · ${dshort(d.at)}${d.verificado?' · compra verificada':''}</small></div>
         <span class="badge ${ST[d.status]?.[0]||'b-neutral'}">${ST[d.status]?.[1]||esc(d.status)}</span>
         ${w2?`${d.status!=='aprovado'?`<button class="btn sm primary" data-dpok="${esc(d.id)}"><i data-lucide="check"></i>Publicar</button>`:`<button class="btn sm" data-dphide="${esc(d.id)}"><i data-lucide="eye-off"></i>Ocultar</button>`}
           <button class="btn sm" data-dpedit="${esc(d.id)}"><i data-lucide="pencil"></i>Editar</button>`:''}</div>`).join('')}</div>`
-      :emptyState('message-square-quote','Nenhum depoimento ainda','Quando um cliente escrever pela página do pedido, ele aparece aqui para você aprovar. Você também pode cadastrar um depoimento real recebido pelo WhatsApp ou Instagram.')}</section>`; }
+      :emptyState('message-square-quote','Nenhum depoimento ainda','Quando um cliente escrever pela página do pedido ou pela área Minha conta do site, ele aparece aqui para você aprovar. Você também pode cadastrar um depoimento real recebido pelo WhatsApp ou Instagram.')}</section>${igCard(w2)}`; }
   if(S.lojaTab==='entrega'){ if(!LJ.form) LJ.form=lojaDefaults(); const f=LJ.form, dis=writes('settings')?'':'disabled';
     return head+`<form id="ljForm" class="grid" style="gap:16px">
     <section class="card"><h3>Entrega</h3><p class="hint">O site mostra ao cliente as opções que valem para o CEP dele. Produtos digitais não têm frete.</p><div class="form" style="margin-top:12px">
@@ -1055,13 +1060,29 @@ async function saveCoupon(id){
   const ok=id?await write(()=>DB.doc('coupons/'+id).update(data),'Cupom atualizado'):await (async()=>{ const ref=DB.collection('coupons').doc(); return write(()=>ref.set({...data,used:0,at:data.updatedAt}),'Cupom criado'); })();
   if(ok) closeModal();
 }
-function openDepo(id){
-  const d=id?D.depoimentos.find(x=>x.id===id):null; if(id&&!d) return; const v=d||{nome:'',cidade:'',texto:'',produto:'',origem:'whatsapp',status:'aprovado'}; delArm=null;
+function igCard(w2){
+  if(!window.ESRO_API) return '';
+  if(!IGC.data&&!IGC.loading&&!IGC.err) setTimeout(()=>loadIgComments(false),0);
+  const d=IGC.data, list=d?.comentarios||[];
+  return `<section class="card" style="margin-top:16px"><div class="card-top"><div><h3>Comentários positivos no Instagram</h3><p class="hint">Elogios deixados nas publicações da ESRO, separados automaticamente (sem perguntas nem reclamações). Comentário público não é autorização: peça pelo Direct antes de publicar no site. ${d?.atualizadoEm?`Lido em ${dtime(d.atualizadoEm)}.`:''}</p></div>
+    <button class="btn" data-igload ${IGC.loading?'disabled':''}><i data-lucide="refresh-cw"></i>${IGC.loading?'Buscando…':'Buscar comentários'}</button></div>
+    ${IGC.err?`<div class="banner warn"><i data-lucide="alert-triangle"></i><div>${esc(IGC.err)}</div></div>`:''}
+    ${d&&!d.configurado?`<div class="banner"><i data-lucide="info"></i><div>O Instagram ainda não está ligado ao servidor (IG_TOKEN). Quando estiver, os comentários aparecem aqui.</div></div>`:''}
+    ${d?.erro?`<div class="banner warn"><i data-lucide="alert-triangle"></i><div>${esc(d.erro)}</div></div>`:''}
+    ${list.length?`<div class="list">${list.map(c=>`<div class="row prow"><span class="pthumb"><i data-lucide="instagram"></i></span><div class="grow"><b>@${esc(c.usuario||'?')}</b><small style="white-space:normal">“${esc(c.texto)}”</small>
+      <small>${c.data?dshort(c.data):''}${c.legenda?' · na publicação “'+esc(c.legenda)+'”':''}${c.post?` · <a href="${esc(c.post)}" target="_blank" rel="noopener noreferrer">ver no Instagram</a>`:''}</small></div>
+      <button class="btn sm" data-igask="${esc(c.id)}"><i data-lucide="copy"></i>Copiar pedido de autorização</button>
+      ${w2?`<button class="btn sm primary" data-iguse="${esc(c.id)}"><i data-lucide="plus"></i>Usar como depoimento</button><button class="btn sm" data-igskip="${esc(c.id)}" title="Não mostrar mais este comentário"><i data-lucide="x"></i>Ignorar</button>`:''}</div>`).join('')}</div>`
+      :(d&&!IGC.loading?`<p class="hint" style="margin-top:10px">Nenhum elogio novo encontrado${d.total?` entre ${d.total} comentário(s) guardado(s)`:''}.</p>`:'')}</section>`;
+}
+let DPRE=null;
+function openDepo(id,pre){
+  const d=id?D.depoimentos.find(x=>x.id===id):null; if(id&&!d) return; DPRE=d?null:(pre||null); const v=d||{nome:'',cidade:'',texto:'',produto:'',origem:'whatsapp',status:'aprovado',...(pre||{})}; delArm=null;
   const site=d&&d.origem==='site';
   $('#modalRoot').innerHTML=`<div class="overlay" data-close><div class="modal" role="dialog" aria-modal="true" aria-labelledby="dt" style="width:min(600px,100%)">
     <div class="modal-head"><h3 id="dt">${d?'Depoimento':'Cadastrar depoimento'}</h3><button class="close" data-x aria-label="Fechar"><i data-lucide="x"></i></button></div>
     <form id="dpForm" class="modal-body form" style="display:grid">
-      <label><span>Nome como deve aparecer <span class="req">*</span></span><input class="inp" id="dp-nome" maxlength="40" value="${esc(v.nome)}" placeholder="Ex.: Ana S."></label>
+      <label><span>Nome como deve aparecer <span class="req">*</span></span><input class="inp" id="dp-nome" maxlength="40" value="${esc(v.nome)}" placeholder="Ex.: Ana S.">${v.igUsuario?`<small class="hint">Comentário de @${esc(v.igUsuario)}. Use o nome que a pessoa autorizar.</small>`:''}</label>
       <label>Cidade<input class="inp" id="dp-cidade" maxlength="40" value="${esc(v.cidade||'')}"></label>
       <label class="full"><span>Depoimento <span class="req">*</span></span><textarea class="inp" id="dp-texto" rows="5" maxlength="600" ${site?'readonly':''}>${esc(v.texto)}</textarea>${site?'<small class="hint">Escrito pelo cliente: o texto não pode ser alterado. Para não publicar, use “Ocultar”.</small>':'<small class="hint">Copie as palavras do cliente, sem mudar o sentido.</small>'}</label>
       <label>Produto<input class="inp" id="dp-produto" maxlength="80" value="${esc(v.produto||'')}" list="dl-dprod"><datalist id="dl-dprod">${D.products.map(p=>`<option value="${esc(p.name)}">`).join('')}</datalist></label>
@@ -1078,8 +1099,9 @@ async function saveDepo(id){
   if(!site&&!$('#dp-aut').checked){ $('#dp-aut').focus(); toast('Só publique com a autorização da pessoa. Marque a confirmação.',1); return; }
   const now=new Date().toISOString(), base={nome:g('nome'),cidade:g('cidade'),produto:g('produto'),updatedAt:now};
   if(!site) Object.assign(base,{texto:g('texto'),origem:g('origem'),autorizado:true,autorizadoEm:d&&d.autorizadoEm||now});
+  if(!d&&DPRE?.igComentario) base.igComentario=DPRE.igComentario;
   const ok=d?await write(()=>DB.doc('depoimentos/'+id).update(base),'Depoimento salvo'):await (async()=>{ const ref=DB.collection('depoimentos').doc(); return write(()=>ref.set({...base,status:'aprovado',verificado:false,at:now}),'Depoimento publicado'); })();
-  if(ok){ logAct(d?'Depoimento alterado':'Depoimento cadastrado',base.nome); closeModal(); }
+  if(ok){ logAct(d?'Depoimento alterado':'Depoimento cadastrado',base.nome); if(base.igComentario&&IGC.data) IGC.data.comentarios=IGC.data.comentarios.filter(x=>x.id!==base.igComentario); closeModal(); }
 }
 async function saveLoja(){
   readLojaForm(); const f=LJ.form, dg=s=>digits(s);
@@ -1139,6 +1161,10 @@ async function lojaClick(el,d){
   if(d.ljfdel!==undefined){ readLojaForm(); LJ.form.faixas=LJ.form.faixas.filter((_,i)=>i!==+d.ljfdel); render(); return true; }
   if(d.ljsave!==undefined){ saveLoja(); return true; }
   if(d.dpnew!==undefined){ openDepo(null); return true; }
+  if(d.igload!==undefined){ loadIgComments(true); return true; }
+  if(d.igask){ const c=IGC.data?.comentarios?.find(x=>x.id===d.igask); if(c) copy(IG_PEDIDO(c.usuario)); return true; }
+  if(d.iguse){ const c=IGC.data?.comentarios?.find(x=>x.id===d.iguse); if(c) openDepo(null,{nome:'',texto:c.texto,origem:'instagram',igComentario:c.id,igUsuario:c.usuario}); return true; }
+  if(d.igskip){ const id=d.igskip; window.ESRO_API('POST',`/depoimentos/instagram/${encodeURIComponent(id)}/ignorar`,{}).then(()=>{ if(IGC.data) IGC.data.comentarios=IGC.data.comentarios.filter(x=>x.id!==id); render(); toast('Comentário ignorado'); }).catch(e=>toast(apiErr(e,'Não foi possível ignorar agora.'),1)); return true; }
   if(d.dpedit){ openDepo(d.dpedit); return true; }
   if(d.dpsave!==undefined){ saveDepo(d.dpsave||null); return true; }
   if(d.dpok){ const x=D.depoimentos.find(y=>y.id===d.dpok); if(x){ if(x.autorizado!==true){ toast('Este depoimento não tem autorização registrada. Abra em Editar e confirme a autorização.',1); return true; } write(()=>DB.doc('depoimentos/'+x.id).update({status:'aprovado',aprovadoEm:new Date().toISOString()}),'Depoimento publicado no site'); logAct('Depoimento publicado',x.nome); } return true; }
