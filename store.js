@@ -36,7 +36,7 @@ function origemDe(ref, host) {
 }
 const aparelhoDe = (ua) => /iPad|Tablet/i.test(ua) ? 'Tablet' : /Mobi|Android|iPhone/i.test(ua) ? 'Celular' : 'Computador';
 
-export function makeStore({ cfg, repo, log = console, clientIp, counter, accounts, shop, mailer, fetchImpl = fetch }) {
+export function makeStore({ cfg, repo, log = console, clientIp, counter, accounts, shop, depo, mailer, fetchImpl = fetch }) {
   const orders = counter(3600e3), ordersDay = counter(24 * 3600e3), news = counter(3600e3), beacons = counter(60e3);
   const MAX_ORDERS_IP = cfg.store?.ordersPerHour || 8, MAX_ORDERS_DAY = cfg.store?.ordersPerDay || 300;
   const stat = (kind, key, n = 1) => repo.statAdd(dayOf(), kind, key, n).catch(e => log.error('[estatística]', e?.message || e));
@@ -165,6 +165,7 @@ export function makeStore({ cfg, repo, log = console, clientIp, counter, account
   }
 
   shop?.publicRoutes(api);   // produtos, frete, cupom, compra e acompanhamento do pedido
+  depo?.publicRoutes(api);   // depoimentos aprovados e envio pela página do pedido
 
   return {
     mount(app) { app.use('/api', api); },

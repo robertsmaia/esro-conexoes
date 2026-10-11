@@ -8,7 +8,21 @@ import { PGlite } from '@electric-sql/pglite';
 import { loadConfig } from '../src/config.js';
 import { migrate, repo as makeRepo } from '../src/db.js';
 import { createApp } from '../src/app.js';
-import { SEED_PRODUCTS } from '../src/shop.js';
+import { SEED_PRODUCTS, slugify } from '../src/shop.js';
+import { migratePrices } from '../src/precos.js';
+
+// Vitrine como estava em produção antes da política de preços de outubro de 2026 (tudo "sob orçamento", com faixa).
+const LEGACY = [
+  ['planner', 'Planner personalizado', 'Organização', 45, 90, 'Planner em brochura com o seu nome na capa, divisórias e folhas para planejar a semana e o mês.'],
+  ['agenda', 'Agenda personalizada', 'Personalizado', 45, 85, 'Agenda do ano com capa personalizada, elástico e fita marcadora.'],
+  ['caderno', 'Caderno em brochura', 'Papelaria', 25, 55, 'Caderno em brochura com capa personalizada e acabamento artesanal.'],
+  ['bloquinho', 'Bloquinho em brochura', 'Papelaria', 15, 30, 'Bloquinho de anotações com capa personalizada, ótimo para presentear.'],
+  ['caderneta', 'Capa de caderneta de vacinação', 'Personalizado', 15, 35, 'Capa personalizada com o nome da criança para proteger a caderneta de vacinação.'],
+  ['pdf', 'Material de estudo em PDF', 'Educacional', 30, 80, 'Material de estudo organizado em PDF, feito sob medida para o tema que você precisa.'],
+  ['slides', 'Slides de formação', 'Educacional', 35, 90, 'Apresentação pronta para a sua formação continuada, com tópicos e visual cuidado.'],
+  ['convites', 'Convites e cartazes', 'Arte digital', 20, 50, 'Arte digital personalizada para convites, cartazes e comunicados.'],
+].map(([img, name, cat, min, max, desc], i) => ({ id: 'prd_' + img, data: { name, slug: slugify(name), cat, desc, mode: 'orcamento', price: 0, min, max, imgs: ['/assets/produtos/' + img + '.svg'], vars: [], pers: '', stock: null,
+  peso: 300, c: 25, l: 18, a: 3, digital: ['pdf', 'slides', 'convites'].includes(img), on: true, vitrine: true, ord: i + 1 } }));
 import { crc16 } from '../src/pix.js';
 
 const SECRET = 'segredo-de-teste-com-mais-de-24-caracteres', SENHA = 'senha-do-painel-123', MP_SECRET = 'segredo-do-aviso-mp';
@@ -24,10 +38,10 @@ const fakeFetch = async (url, opts = {}) => {
   if (u.includes('api.brevo.com')) return json({ messageId: '<1@brevo>' }, 201);
   return json({}, 404);
 };
-const mk = async (env, store = {}) => {
+const mk = async (env, store = {}, seed = null) => {
   const pg = new PGlite(), db = { q: (s, p) => pg.query(s, p), exec: (s) => pg.exec(s) }; await migrate(db);
   const repo = makeRepo(db), cfg = loadConfig({ MCP_SECRET: SECRET, PAINEL_SENHA: SENHA, ...env }); cfg.store = { catalogTtlMs: 0, ordersPerHour: 100, ...store };
-  for (const p of SEED_PRODUCTS) await repo.docSet('products', p.id, p.data);
+  for (const p of (seed || LEGACY)) await repo.docSet('products', p.id, p.data);
   const app = createApp({ cfg, repo, fetchImpl: fakeFetch, log: { error() {}, warn() {} } }), server = app.listen(0); await new Promise(r => server.once('listening', r));
   return { pg, repo, server, app, base: `http://127.0.0.1:${server.address().port}` };
 };
@@ -414,4 +428,102 @@ test('Robustez: registro de atividades só cresce, arquivos respeitam o nível e
   assert.equal((await painel('POST', '/usuarios', { usuario: 'esperto', nome: 'Esperto', nivel: 'constructor', senha: 'uma-senha-boa-1' }, dono)).status, 422);
   assert.equal((await painel('POST', '/tool/constructor', {}, dono)).status, 404); assert.equal((await painel('POST', '/redes', { rede: 'constructor', seguidores: 5 }, dono)).status, 422);
   assert.equal((await painel('GET', '/sync?after=0', undefined, prod)).status, 200);
+});
+
+/* ---------- Política de preços de outubro de 2026 ---------- */
+test('Preços: a migração passa os físicos para preço fixo, tira as faixas do catálogo e não mexe em pedidos', async (t) => {
+  const M = await mk({}, {}, LEGACY); t.after(async () => { M.server.closeAllConnections?.(); M.server.close(); await M.pg.close().catch(() => {}); }); const mp = (m, p, b, c) => call(M.base, '/painel/api')(m, p, b, c), dM = await login(null, SENHA, M.base);
+  await mp('PUT', '/db/catalog/c07', { n: '07', t: 'Papelaria personalizada', kind: 'fisico', items: [['Agenda personalizada', 45, 85], ['Planner personalizado', 45, 90], ['Bloquinho em brochura', 15, 30], ['Caderno em brochura', 25, 55], ['Capa de caderneta de vacinação', 15, 35]].map(([name, min, max]) => ({ name, min, max, on: true })) }, dM);
+  await mp('PUT', '/db/settings/store', { pixType: 'email', pixKey: 'pix@exemplo.com', prazo: 'Para produtos físicos, prazo de produção e entrega são combinados no orçamento.' }, dM);
+  await mp('PATCH', '/db/products/prd_planner', { imgs: ['/assets/produtos/agenda.svg'], desc: 'Texto que a dona escreveu.' }, dM);   // ajuste feito à mão no painel: tem de continuar
+  const pedidos = [[1001, 24, 'novo'], [1002, 144, 'novo'], [1005, 40, 'producao']].map(([num, value, status]) => ({ num, value, status, item: 'Pedido ' + num, qty: 1, payS: 'Aguardando', pays: [], kind: 'fisico' }));
+  for (const o of pedidos) await mp('PUT', '/db/orders/p' + o.num, o, dM);
+  const antes = await M.pg.query(`SELECT id, data::text AS d FROM panel_docs WHERE col = 'orders' ORDER BY id`);
+  const r = await migratePrices(M.repo, slugify, { log() {} }); assert.equal(r.feito, true);
+  assert.deepEqual((await M.pg.query(`SELECT id, data::text AS d FROM panel_docs WHERE col = 'orders' ORDER BY id`)).rows, antes.rows);   // pedidos idênticos
+  const prods = (await (await call(M.base, '/api')('GET', '/produtos')).json()).produtos, by = Object.fromEntries(prods.map(p => [p.id, p]));
+  assert.deepEqual(['prd_planner', 'prd_agenda', 'prd_caderno', 'prd_bloquinho', 'prd_caderneta'].map(id => [by[id].nome, by[id].modo, by[id].preco]),
+    [['Planner personalizado', 'compra', 59.9], ['Agenda personalizada 2027', 'compra', 59.9], ['Caderno personalizado', 'compra', 42], ['Bloquinho personalizado', 'compra', 18], ['Capa de caderneta de vacinação', 'compra', 39.9]]);
+  assert.ok(prods.filter(p => !p.digital).every(p => p.modo === 'compra' && !p.min && !p.max));   // nenhum físico com faixa
+  assert.deepEqual(by.prd_bloquinho.variacoes, [{ nome: 'Capa', opcoes: [{ nome: 'Capa simples + caneta', acrescimo: 0 }, { nome: 'Capa dura', acrescimo: 17 }] }]);
+  assert.deepEqual([by.prd_bloquinho.personalizacao, by.prd_caderneta.personalizacao, by.prd_bloquinho.faixasQtd], ['Nome na capa', 'Nome da criança', [{ min: 10, preco: 15 }]]);
+  assert.deepEqual(by.prd_caderno.variacoes[0].opcoes.map(o => o.nome), ['Pautado', 'Caligrafia']);
+  assert.deepEqual([by.prd_planner.imagens, by.prd_planner.descricao], [['/assets/produtos/agenda.svg'], 'Texto que a dona escreveu.']);
+  assert.match(by.prd_agenda.descricao, /2027 com capa dura/);
+  assert.ok(!prods.some(p => /Formação/.test(p.nome)));   // "Material pronto" fica fora do site até ter preço
+  const mat = await M.repo.docGet('products', 'prd_formacao_antirracista'); assert.deepEqual([mat.on, mat.cat, mat.digital, mat.mode, mat.price], [false, 'Material pronto', true, 'compra', 0]);
+  const cat = (await (await call(M.base, '/api')('GET', '/catalogo')).json()).categorias.find(c => c.n === '07');
+  assert.deepEqual(cat.itens.map(i => [i.nome, i.min, i.max]), [['Agenda personalizada 2027', 59.9, 59.9], ['Planner personalizado', 59.9, 59.9], ['Bloquinho personalizado', 18, 18], ['Caderno personalizado', 42, 42], ['Capa de caderneta de vacinação', 39.9, 39.9]]);
+  assert.match((await M.repo.docGet('settings', 'store')).prazo, /combinados no orçamento\. A produção começa após a confirmação do pagamento via PIX ou do sinal de 50%\.$/);
+  // Endereço antigo do produto continua funcionando
+  const old = await fetch(M.base + '/produto/bloquinho-em-brochura', { redirect: 'manual' }); assert.equal(old.status, 301); assert.equal(old.headers.get('location'), '/produto/bloquinho-personalizado');
+  assert.equal((await (await call(M.base, '/api')('GET', '/produtos/agenda-personalizada')).json()).produto.nome, 'Agenda personalizada 2027');
+  const page = await (await fetch(M.base + '/produto/bloquinho-personalizado')).text(); assert.match(page, /<title>Bloquinho personalizado/); assert.match(page, /R\$ 18,00/); assert.ok(!/R\$ \d+,\d\d a R\$/.test(page));
+  // Rodar de novo não muda nada (nem o texto do prazo)
+  await M.repo.docMerge('products', 'prd_caderno', { price: 45 });
+  assert.equal((await migratePrices(M.repo, slugify, { log() {} })).feito, false); assert.equal((await M.repo.docGet('products', 'prd_caderno')).price, 45);
+});
+
+test('Preços: preço por quantidade e variações calculados no servidor, mesmo com total adulterado', async (t) => {
+  const N = await mk({}, {}, SEED_PRODUCTS); t.after(async () => { N.server.closeAllConnections?.(); N.server.close(); await N.pg.close().catch(() => {}); }); const np = (m, p, b, c) => call(N.base, '/painel/api')(m, p, b, c), ns = (m, p, b) => call(N.base, '/api')(m, p, b), dN = await login(null, SENHA, N.base);
+  await np('PUT', '/db/settings/store', { pixType: 'email', pixKey: 'pix@exemplo.com', pixName: 'ESRO', pixCity: 'SAO PAULO' }, dN);
+  await np('PUT', '/db/settings/loja', { retirada: { on: true, texto: 'Zona Leste' } }, dN);
+  const b = (await (await ns('GET', '/produtos/bloquinho-personalizado')).json()).produto;
+  assert.deepEqual([b.preco, b.faixasQtd, 'custo' in b], [18, [{ min: 10, preco: 15 }], false]);
+  const SIMPLES = { Capa: 'Capa simples + caneta' }, DURA = { Capa: 'Capa dura' }, line = (qtd, vars) => ({ id: 'prd_bloquinho', qtd, vars, pers: 'Ana' });
+  const sub = async (itens) => (await (await ns('POST', '/frete', { itens })).json()).subtotal;
+  assert.equal(await sub([line(12, SIMPLES)]), 180); assert.equal(await sub([line(9, SIMPLES)]), 162); assert.equal(await sub([line(10, DURA)]), 320);
+  assert.equal(await sub([line(5, SIMPLES), line(5, DURA)]), 235);   // o degrau soma as opções do mesmo produto: 5 × 15 + 5 × (15 + 17)
+  assert.equal(await sub([line(9, DURA)]), 315); assert.equal(await sub([line(1, DURA)]), 35);
+  assert.equal(await sub([{ id: 'prd_agenda', qtd: 1, vars: { Capa: 'Capa dura' }, pers: 'Bia' }, { id: 'prd_caderno', qtd: 2, vars: { Miolo: 'Caligrafia' }, pers: 'Theo' }]), 143.9);
+  assert.equal((await ns('POST', '/frete', { itens: [{ id: 'prd_caderno', qtd: 1, vars: { Miolo: 'Quadriculado' }, pers: 'Theo' }] })).status, 422);
+  assert.equal((await ns('POST', '/frete', { itens: [{ id: 'prd_caderneta', qtd: 1 }] })).status, 422);   // sem o nome da criança não vende
+  // Custo e degraus vindos do painel: o custo vai para o pedido (para a margem) e nunca para o site
+  await np('PATCH', '/db/products/prd_bloquinho', { custo: 6, vars: [{ nome: 'Capa', ops: [{ n: 'Capa simples + caneta', add: 0 }, { n: 'Capa dura', add: 17, custo: 8 }] }] }, dN);
+  const r = await ns('POST', '/compra', { ...compra({ itens: [{ ...line(10, DURA), unit: 1, preco: 1 }, line(2, SIMPLES)], entrega: 'retirada' }), total: 1, subtotal: 1, desconto: 999 }), j = await r.json();
+  assert.equal(r.status, 201, JSON.stringify(j)); assert.equal(j.total, 350);   // 12 unidades no total: 10 × (15 + 17) + 2 × 15, sem o desconto inventado
+  const o = (await N.repo.orderByPub(j.acompanhar.split('/').pop())).data;
+  assert.deepEqual(o.loja.itens.map(i => [i.qtd, i.unit, i.custo]), [[10, 32, 14], [2, 15, 6]]);
+  assert.ok(!JSON.stringify(await (await ns('GET', '/pedido-loja/' + o.pub)).json()).includes('custo'));
+  assert.ok(!JSON.stringify(await (await ns('GET', '/produtos')).json()).includes('custo'));
+  // Degrau inválido vindo do painel (mais caro que o preço, ou para 1 unidade) é ignorado
+  await np('PATCH', '/db/products/prd_caderno', { tiers: [{ min: 1, price: 10 }, { min: 5, price: 50 }, { min: 20, price: 38 }] }, dN);
+  assert.deepEqual((await (await ns('GET', '/produtos/caderno-personalizado')).json()).produto.faixasQtd, [{ min: 20, preco: 38 }]);
+  // Orçamento pelo nome usa o preço fixo
+  const q = await (await ns('POST', '/pedido', { nome: 'Ana Souza', telefone: '11 98888-7777', itens: [{ nome: 'Planner personalizado', qtd: 2 }] })).json(); assert.deepEqual(q.estimativa, { min: 119.8, max: 119.8 });
+});
+
+test('Depoimentos: só o cliente do pedido escreve, com autorização; o site mostra apenas os aprovados, sem dados pessoais', async (t) => {
+  const X = await mk({}); t.after(async () => { X.server.close(); await X.pg.close(); });
+  const s = (m, p, b) => call(X.base, '/api')(m, p, b), pn = (m, p, b, c) => call(X.base, '/painel/api')(m, p, b, c);
+  const dono = await login(null, SENHA, X.base);
+  // Sem nenhum aprovado, a lista é vazia (a seção do site fica escondida)
+  assert.deepEqual((await (await s('GET', '/depoimentos')).json()).depoimentos, []);
+  const pub = crypto.randomBytes(32).toString('base64url');
+  await pn('PUT', '/db/orders/pdep', { num: 1501, at: '2026-10-05T12:00:00.000Z', status: 'enviado', client: 'Carla Mendes', contact: '(11) 95555-1234', item: 'Planner personalizado', value: 59.9, qty: 1, pub }, dono);
+  const ok = { token: pub, nome: 'Carla M.', cidade: 'Santo André', texto: 'O planner ficou lindo, chegou rápido e muito bem embalado!', aceite: true };
+  assert.equal((await s('POST', '/depoimentos', { ...ok, token: 'x'.repeat(43) })).status, 404);
+  assert.equal((await s('POST', '/depoimentos', { ...ok, aceite: false })).status, 422);
+  assert.equal((await s('POST', '/depoimentos', { ...ok, texto: 'Lindo!' })).status, 422);
+  assert.equal((await s('POST', '/depoimentos', { ...ok, nome: '12' })).status, 422);
+  assert.deepEqual(await (await s('GET', '/depoimentos/pedido/' + pub)).json(), { enviado: false, status: null });
+  assert.equal((await s('POST', '/depoimentos', ok)).status, 201);
+  assert.equal((await s('POST', '/depoimentos', ok)).status, 409);
+  const d = await X.repo.docGet('depoimentos', 'dep_pdep');
+  assert.deepEqual([d.status, d.autorizado, d.verificado, d.origem, d.pedido, d.produto], ['pendente', true, true, 'site', 1501, 'Planner personalizado']);
+  assert.deepEqual(await (await s('GET', '/depoimentos/pedido/' + pub)).json(), { enviado: true, status: 'em revisão' });
+  // Pendente não aparece; aprovado aparece sem telefone, número do pedido ou nome completo
+  assert.deepEqual((await (await s('GET', '/depoimentos')).json()).depoimentos, []);
+  assert.equal((await pn('PATCH', '/db/depoimentos/dep_pdep', { status: 'aprovado' }, dono)).status < 300, true);
+  // Cadastrado no painel sem autorização não aparece, mesmo aprovado
+  await pn('PUT', '/db/depoimentos/manual1', { nome: 'Paula', texto: 'Recebi pelo WhatsApp e adorei o caderno.', origem: 'whatsapp', status: 'aprovado', at: '2026-10-06T10:00:00.000Z' }, dono);
+  const lista = (await (await s('GET', '/depoimentos')).json()).depoimentos;
+  assert.deepEqual(lista, [{ nome: 'Carla M.', cidade: 'Santo André', texto: ok.texto, produto: 'Planner personalizado', mes: (d.at || '').slice(0, 7), verificado: true, origem: 'Pelo site' }]);
+  assert.ok(!JSON.stringify(lista).match(/95555|1501|Mendes|pdep/));
+  // Ocultado sai do site
+  await pn('PATCH', '/db/depoimentos/dep_pdep', { status: 'oculto' }, dono);
+  assert.deepEqual((await (await s('GET', '/depoimentos')).json()).depoimentos, []);
+  // Limite de envios por endereço
+  let last; for (let i = 0; i < 8; i++) last = (await s('POST', '/depoimentos', { ...ok, token: 'y'.repeat(43) })).status;
+  assert.equal(last, 429);
 });

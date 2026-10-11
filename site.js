@@ -56,6 +56,7 @@
     return 'Olá, ESRO! ' + (ref ? 'Enviei pelo site o pedido de orçamento nº ' + ref + ': ' : 'Gostaria de um orçamento para: ') + list + '.';
   }
   function renderCart() {
+    if (Cart) Cart.reprice(order);   // preço por quantidade
     var total = order.reduce(function (a, i) { return a + i.qtd; }, 0);
     count.textContent = total; items.textContent = '';
     if (!order.length) items.appendChild(el('p', 'cart-empty', 'Seu pedido está vazio. Escolha um item da vitrine ou do catálogo.'));
@@ -92,7 +93,8 @@
     if (!done.hidden) { done.hidden = true; order = []; }
     var prod = products.filter(function (x) { return x.id === btn.getAttribute('data-id'); })[0];
     var twin = btn.getAttribute('data-img') ? btn : $$('#kits .add').filter(function (x) { return x.getAttribute('data-name') === nome; })[0];   // item do catálogo que também está na vitrine usa a mesma imagem
-    var it = { nome: nome, qtd: 1, img: twin ? twin.getAttribute('data-img') || '' : '', id: prod ? prod.id : '', tipo: prod ? prod.modo : 'orcamento', vars: {}, pers: '', preco: prod && prod.modo === 'compra' ? prod.preco : 0, slug: prod ? prod.slug : '' };
+    var it = { nome: nome, qtd: 1, img: twin ? twin.getAttribute('data-img') || '' : '', id: prod ? prod.id : '', tipo: prod ? prod.modo : 'orcamento', vars: {}, pers: '', preco: prod && prod.modo === 'compra' ? prod.preco : 0, slug: prod ? prod.slug : '',
+      base: prod && prod.modo === 'compra' ? prod.preco : 0, add: 0, faixas: prod ? prod.faixasQtd || [] : [] };
     if (!(Cart ? Cart.add(order, it) : order.push(it))) { say('O pedido pode ter até 20 itens'); return; }
     renderCart(); say('Item adicionado ao pedido'); track({ p: location.pathname, e: 'carrinho' });
   }
@@ -149,7 +151,9 @@
     c.itens.forEach(function (i) {
       var li = el('li'); li.appendChild(el('span', null, i.nome));
       var right = el('span', 'li-price'); right.appendChild(el('strong', null, priceText(i)));
-      var b = el('button', 'add li-add', '+'); b.type = 'button'; b.setAttribute('data-name', i.nome); b.setAttribute('aria-label', 'Adicionar ' + i.nome + ' ao pedido'); right.appendChild(b);
+      var prod = products.filter(function (x) { return x.modo === 'compra' && x.nome.toLowerCase() === i.nome.toLowerCase(); })[0];
+      if (prod) { var go = el('a', 'add li-add', '→'); go.href = '/produto/' + prod.slug; go.setAttribute('aria-label', 'Escolher opções de ' + i.nome); right.appendChild(go); }   // produto com preço fixo: a compra é pela página dele
+      else { var b = el('button', 'add li-add', '+'); b.type = 'button'; b.setAttribute('data-name', i.nome); b.setAttribute('aria-label', 'Adicionar ' + i.nome + ' ao pedido'); right.appendChild(b); }
       li.appendChild(right); ul.appendChild(li);
     });
     art.appendChild(ul);
@@ -179,6 +183,7 @@
     if (p.modo === 'compra') { if (p.precoDe) { var old = el('s', null, Cart.money(p.precoDe)); val.appendChild(old); val.appendChild(document.createTextNode(' ')); } val.appendChild(document.createTextNode(Cart.money(p.preco))); }
     else val.textContent = priceText(p);
     price.appendChild(val);
+    if (p.modo === 'compra' && p.faixasQtd && p.faixasQtd.length) { var t = p.faixasQtd[0]; body.appendChild(el('small', 'tier', 'A partir de ' + t.min + ' un.: ' + Cart.money(t.preco) + ' cada')); }
     var needsPage = p.modo === 'compra' && (p.variacoes.length || p.personalizacao || !p.disponivel);
     if (needsPage) { var go = el('a', 'add', '→'); go.href = '/produto/' + p.slug; go.setAttribute('aria-label', (p.disponivel ? 'Escolher opções de ' : 'Ver ') + p.nome); price.appendChild(go); }
     else { var b = el('button', 'add', '+'); b.type = 'button'; b.setAttribute('data-name', p.nome); b.setAttribute('data-id', p.id); b.setAttribute('data-img', p.imagens[0] || ''); b.setAttribute('aria-label', 'Adicionar ' + p.nome); price.appendChild(b); }
@@ -189,7 +194,7 @@
     var grid = $('#kits .product-grid'), shown = products.filter(function (p) { return p.vitrine; });
     if (grid && shown.length) { grid.textContent = ''; shown.forEach(function (p) { grid.appendChild(productCard(p)); }); grid.setAttribute('data-live', '1'); }
     // Carrinho guardado: atualiza preço e tira o que saiu da loja.
-    order = order.filter(function (i) { if (!i.id) return true; var p = products.filter(function (x) { return x.id === i.id; })[0]; if (!p) return false; i.tipo = p.modo; if (p.modo === 'compra') { var add = 0; p.variacoes.forEach(function (v) { var o = v.opcoes.filter(function (x) { return x.nome === i.vars[v.nome]; })[0]; if (o) add += o.acrescimo; }); i.preco = Math.round((p.preco + add) * 100) / 100; } return true; });
+    order = order.filter(function (i) { if (!i.id) return true; var p = products.filter(function (x) { return x.id === i.id; })[0]; if (!p) return false; i.tipo = p.modo; if (p.modo === 'compra') { var add = 0; p.variacoes.forEach(function (v) { var o = v.opcoes.filter(function (x) { return x.nome === i.vars[v.nome]; })[0]; if (o) add += o.acrescimo; }); i.base = p.preco; i.add = add; i.faixas = p.faixasQtd || []; i.preco = Math.round((p.preco + add) * 100) / 100; } return true; });
     if (catalogData) applyCatalog(catalogData); else { products.forEach(function (p) { if (p.modo !== 'compra') prices[p.nome.toLowerCase()] = { min: p.min, max: p.max }; }); renderCart(); }
   }).catch(function () { });
   if (location.hash === '#pedido') { openCart(); try { history.replaceState(null, '', location.pathname); } catch (_) { } }
@@ -209,6 +214,22 @@
   if (search) search.addEventListener('input', filterCatalog);
   var searchBtn = $('#searchOpen');
   if (searchBtn && search) searchBtn.addEventListener('click', function () { $('#catalogo').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); setTimeout(function () { search.focus(); }, 350); });
+
+  /* ---------- Depoimentos: só os aprovados pela ESRO; sem nenhum, a seção fica escondida ---------- */
+  var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  fetch('/api/depoimentos', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    var list = d && Array.isArray(d.depoimentos) ? d.depoimentos.slice(0, 6) : [], grid = $('#depGrid'), sec = $('#depoimentos');
+    if (!grid || !list.length) return;
+    list.forEach(function (x) {
+      var fig = el('figure', 'dep'), q = el('blockquote', null, x.texto), cap = el('figcaption');
+      cap.appendChild(el('strong', null, x.nome + (x.cidade ? ' · ' + x.cidade : '')));
+      var info = [x.produto, /^\d{4}-\d{2}$/.test(x.mes) ? MESES[Number(x.mes.slice(5)) - 1] + ' de ' + x.mes.slice(0, 4) : ''].filter(Boolean).join(' · ');
+      if (info) cap.appendChild(el('span', null, info));
+      if (x.verificado) cap.appendChild(el('span', 'ver', '✓ Compra verificada'));
+      fig.appendChild(q); fig.appendChild(cap); grid.appendChild(fig);
+    });
+    sec.hidden = false;
+  }).catch(function () { });
 
   /* ---------- Novidades por e-mail ---------- */
   var news = $('#emailForm');

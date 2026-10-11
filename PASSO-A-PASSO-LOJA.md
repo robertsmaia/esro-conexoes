@@ -1,4 +1,4 @@
-# ESRO — Loja online: passo a passo de cada recurso (versão 1.4)
+# ESRO — Loja online: passo a passo de cada recurso (versão 1.5)
 
 Este guia mostra como usar cada recurso novo do site e do painel. Está na ordem em que vale a pena fazer.
 
@@ -17,10 +17,12 @@ Este guia mostra como usar cada recurso novo do site e do painel. Está na ordem
 | 7. Rastreio e nota fiscal | Pedidos → abrir o pedido | Nota: emissor de notas |
 | 8. Canais de venda | Loja online → Integrações | Conta na Meta / Google |
 | 9. Outras redes sociais | Monitoramento → Outras redes | Não |
+| 13. Preços, custo e margem (1.5) | Loja online → Produtos / Entrega, avisos e margem | Não |
+| 14. Depoimentos de clientes (1.5) | Loja online → Depoimentos | Não |
 
 ---
 
-## 0. Antes de tudo: publicar a versão 1.4
+## 0. Antes de tudo: publicar a versão 1.5
 
 1. Abra o GitHub no repositório `esro-conexoes` → **Add file → Upload files**.
 2. Envie o arquivo **`esro-pacote.tgz`** que está na pasta `Site Esro` do computador e clique em **Commit changes**.
@@ -279,6 +281,41 @@ O Instagram é lido sozinho. Facebook, TikTok, YouTube, Pinterest e Canal do Wha
 - **Página "Entregas, trocas e devoluções"** (`/entregas`): o texto é um modelo. Leia e ajuste prazos e condições ao que a ESRO pratica (o arquivo é `site/entregas.html`).
 - **Política de Privacidade** (`/privacidade`): foi atualizada para citar a compra pelo site, o Mercado Pago, o Melhor Envio e o serviço de e-mails. Se não for usar algum deles, pode manter.
 - **Endereço do site nas Configurações:** em **Configurações → Mensagens e prazos → Endereço do site**, troque o endereço antigo por `https://www.esro-papelaria.com.br/`.
+
+## 13. Política de preços (versão 1.5, outubro de 2026)
+
+**O que muda sozinho no primeiro deploy da 1.5** (uma vez só; os pedidos que já existem **não** são alterados):
+- Os cinco produtos físicos passam de "Sob orçamento" para **compra direta com preço fixo**: Bloquinho personalizado R$ 18,00 (capa simples + caneta; capa dura +R$ 17,00), Agenda personalizada 2027 R$ 59,90, Planner personalizado R$ 59,90, Caderno personalizado R$ 42,00 (miolo pautado ou caligrafia) e Capa de caderneta de vacinação R$ 39,90. Os endereços antigos das páginas desses produtos continuam funcionando (redirecionam para o novo).
+- O item 07 do **Catálogo** fica com preço único (sem "R$ X a R$ Y"), e o PDF do catálogo foi refeito com os preços novos.
+- O texto de prazo ganha a frase: "A produção começa após a confirmação do pagamento via PIX ou do sinal de 50%." Ela também aparece na página do produto e na finalização da compra.
+- São criados, **desligados e sem preço**, os produtos da categoria **Material pronto**: "Formação antirracista (Word + slides)" e "Formação indígena (Word + slides)".
+
+### Preço por quantidade
+1. **Loja online → Produtos → Editar**, campo **Preço por quantidade**: uma linha por degrau, no formato `10: 15,00` (a partir de 10 unidades, R$ 15,00 cada).
+2. O site mostra "A partir de 10 un.: R$ 15,00 cada" e, quando o cliente atinge o degrau, o total já com o preço menor. As opções (como a capa dura) somam por cima: 10 bloquinhos de capa dura = 10 × (15 + 17) = R$ 320,00.
+3. O servidor soma todas as unidades do mesmo produto no carrinho e refaz a conta; um valor alterado no navegador não passa.
+
+### Custo e margem
+1. **Loja online → Entrega, avisos e margem**: preencha **Taxas de pagamento e plataforma (%)** e **Margem mínima (%)**.
+2. Em cada produto, preencha **Custo por unidade (R$)**. Nas opções, o custo extra vai entre colchetes: `Capa dura +17 [custo 9]`.
+3. A lista de produtos mostra a margem de cada um e fica **vermelha** quando o preço está abaixo do mínimo: preço mínimo = custo ÷ (1 − taxa − margem mínima).
+4. Em **Pedidos** aparecem a margem estimada de cada pedido e o total do mês. Pedidos antigos sem custo registrado usam o custo atual do produto.
+
+### Pagamento antes da produção
+Ao mover um pedido físico para **Em produção** com o pagamento "Aguardando" e sinal menor que 50%, o painel pede confirmação. Não bloqueia: você decide.
+
+### O que depende de você
+- **Material pronto:** defina o preço em **Loja online → Produtos → Editar** e só então marque **Ativo no site**.
+- **Combos (categoria 08):** para mostrar "de/por", cadastre o combo como produto com **Preço** = soma real dos preços avulsos vigentes dos itens e **Preço promocional** = valor do combo, sem data final. O preço riscado precisa ser a soma verdadeira (Código de Defesa do Consumidor). Como hoje os itens dos combos têm preço em faixa, essa soma só existe depois que você fixar o preço de cada item.
+
+## 14. Depoimentos de clientes (versão 1.5)
+
+A página inicial ganhou a seção **Depoimentos**, que só aparece quando existe pelo menos um depoimento aprovado (mostra os 6 mais recentes). Não há depoimentos de exemplo: só entram palavras reais de clientes, com autorização.
+
+- **Pelo site:** quando o pedido é marcado como **Enviado** ou **Concluído**, a página de acompanhamento do pedido mostra o quadro "Conte como foi". O cliente escreve o nome como quer que apareça, a cidade (opcional), o texto, e marca a autorização. Um depoimento por pedido. Ele chega como **Aguardando aprovação** e, com os e-mails ligados, você recebe um aviso.
+- **No painel:** **Loja online → Depoimentos** → **Publicar**, **Ocultar** ou **Editar**. O texto escrito pelo cliente não pode ser alterado; se não quiser publicar, oculte.
+- **Recebeu pelo WhatsApp ou Instagram?** **Cadastrar depoimento**, copie as palavras da pessoa e marque que ela autorizou a publicação. Sem essa confirmação o painel não salva.
+- O site mostra só nome, cidade, produto e mês. Telefone, e-mail e número do pedido nunca aparecem. Os depoimentos que vieram pelo site levam o selo "Compra verificada".
 
 ## 12. O que foi testado e o que ainda não
 

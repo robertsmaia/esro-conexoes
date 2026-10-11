@@ -269,6 +269,13 @@ O passo a passo de cada recurso está no arquivo **PASSO-A-PASSO-LOJA.md**. Resu
 - **Preço, frete e desconto** são sempre calculados no servidor; o que o navegador envia serve só para dizer quais itens o cliente quer.
 - **Estoque reservado** por compra não paga volta sozinho depois de 48 horas.
 
+### 9.12 Preços, margem e depoimentos (versão 1.5)
+Passo a passo nas seções 13 e 14 do **PASSO-A-PASSO-LOJA.md**. Resumo técnico:
+- Produto ganhou `tiers` (`[{min, price}]`, preço por quantidade), `custo` (também por opção) e `slugsAntigos`; `pub()` expõe `faixasQtd` e nunca o custo. `checkItems` soma a quantidade do mesmo produto no carrinho e aplica o maior degrau antes das opções.
+- `settings/loja` ganhou `taxaPct` e `margemMinPct`. Os itens dos pedidos novos guardam o custo unitário para a margem.
+- Migração única `migracao:precos-2026-10` (tabela `kv`) em `src/precos.js`: atualiza produtos, catálogo c07, prazo e cria "Material pronto" desligado. Não toca em pedidos.
+- Depoimentos: coleção `depoimentos` do painel; `GET /api/depoimentos` (só aprovados e autorizados), `POST /api/depoimentos` (exige o link secreto do pedido e a autorização; um por pedido; 6 por hora por endereço) e `GET /api/depoimentos/pedido/<código>`.
+
 ## 10. Segurança
 
 O que o servidor já faz sozinho e o que depende de você está no arquivo **SEGURANCA.md**. Em resumo:

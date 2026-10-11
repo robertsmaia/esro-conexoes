@@ -7,6 +7,7 @@
   var Cart = window.ESROCart, WA = 'https://wa.me/5511992481676';
   var slug = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
   var p = null, qtd = 1, order = Cart.load();
+  var PROD = 'A produção começa após a confirmação do pagamento via PIX ou do sinal de 50%.';
 
   // Contagem de visitas (sem cookies): registra só que uma página de produto foi aberta.
   try { var first = !sessionStorage.getItem('esro_v'); sessionStorage.setItem('esro_v', '1');
@@ -27,10 +28,14 @@
   function showPrice() {
     var box = $('#pdPrice'); box.textContent = '';
     if (p.modo !== 'compra') { box.appendChild(document.createTextNode(!p.min && !p.max ? 'Sob consulta' : p.min === p.max ? Cart.money(p.min) : Cart.money(p.min) + ' a ' + Cart.money(p.max))); box.appendChild(el('small', null, 'valor confirmado no orçamento')); return; }
-    var c = chosen();
-    if (p.precoDe) box.appendChild(el('s', null, Cart.money(p.precoDe + c.add)));
-    box.appendChild(document.createTextNode(Cart.money(p.preco + c.add)));
-    if (qtd > 1) box.appendChild(el('small', null, qtd + ' unidades: ' + Cart.money((p.preco + c.add) * qtd)));
+    var c = chosen(), faixas = p.faixasQtd || [], unit = Math.round((Cart.baseFor(p.preco, faixas, qtd) + c.add) * 100) / 100, cheio = Math.round((p.preco + c.add) * 100) / 100;
+    if (p.precoDe && unit === cheio) box.appendChild(el('s', null, Cart.money(p.precoDe + c.add)));
+    else if (unit < cheio) box.appendChild(el('s', null, Cart.money(cheio)));   // preço por quantidade atingido
+    box.appendChild(document.createTextNode(Cart.money(unit)));
+    if (qtd > 1) box.appendChild(el('small', null, qtd + ' unidades: ' + Cart.money(Math.round(unit * qtd * 100) / 100)));
+    var tb = $('#pdTiers'); tb.textContent = '';
+    faixas.forEach(function (t) { var line = el('span', qtd >= t.min ? 'on' : '', 'A partir de ' + t.min + ' un.: ' + Cart.money(Math.min(p.preco, t.preco) + c.add) + ' cada'); tb.appendChild(line); });
+    tb.hidden = !faixas.length;
   }
   function showImage(i) {
     var main = $('#pdMain');
@@ -66,7 +71,7 @@
     $('#pdAdd').textContent = p.modo === 'compra' ? 'Adicionar ao pedido' : 'Adicionar ao pedido de orçamento';
     var note = $('#pdNote'); note.textContent = '';
     if (!canAdd) { note.appendChild(document.createTextNode('Quer ser avisada quando voltar? ')); var a = el('a', null, 'Fale com a ESRO pelo WhatsApp'); a.href = WA + '?text=' + encodeURIComponent('Olá, ESRO! Quero saber quando volta o produto ' + p.nome + '.'); a.target = '_blank'; a.rel = 'noopener noreferrer'; note.appendChild(a); note.appendChild(document.createTextNode('.')); }
-    else note.textContent = p.modo === 'compra' ? (p.digital ? 'Produto digital: a entrega é feita por e-mail ou WhatsApp.' : 'O frete é calculado pelo CEP na finalização da compra.') : 'Este item é feito sob orçamento: você envia o pedido e a ESRO confirma o valor e o prazo pelo WhatsApp.';
+    else note.textContent = p.modo === 'compra' ? (p.digital ? 'Produto digital: a entrega é feita por e-mail ou WhatsApp.' : 'O frete é calculado pelo CEP na finalização da compra. ' + PROD) : 'Este item é feito sob orçamento: você envia o pedido e a ESRO confirma o valor e o prazo pelo WhatsApp.' + (p.digital ? '' : ' ' + PROD);
     showPrice();
   }
 
@@ -76,7 +81,9 @@
     var pers = $('#pd-pers').value.trim();
     if (p.personalizacao && !pers) { var box = $('#pd-pers-err'); box.textContent = 'Preencha este campo para a ESRO personalizar o produto.'; box.hidden = false; $('#pd-pers').setAttribute('aria-invalid', 'true'); $('#pd-pers').focus(); return false; }
     order = Cart.load();
-    var ok = Cart.add(order, { nome: p.nome, qtd: qtd, img: p.imagens[0] || '', id: p.id, tipo: p.modo, vars: c.vars, pers: pers, preco: p.modo === 'compra' ? Math.round((p.preco + c.add) * 100) / 100 : 0, slug: p.slug });
+    var ok = Cart.add(order, { nome: p.nome, qtd: qtd, img: p.imagens[0] || '', id: p.id, tipo: p.modo, vars: c.vars, pers: pers, preco: p.modo === 'compra' ? Math.round((p.preco + c.add) * 100) / 100 : 0, slug: p.slug,
+      base: p.modo === 'compra' ? p.preco : 0, add: c.add, faixas: p.faixasQtd || [] });
+    Cart.reprice(order);
     if (!ok) { fail('O pedido pode ter até 20 itens diferentes.'); return false; }
     Cart.save(order); count(); track('carrinho'); return true;
   }

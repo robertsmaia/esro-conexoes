@@ -13,6 +13,7 @@ import { pixPayload, paidOf, dueOf } from './pix.js';
 import { templates } from './mail.js';
 import { SITE_DIR } from './panel.js';
 import { siteBase, str } from './util.js';
+import { PRECOS_2026_10, MATERIAL_PRONTO } from './precos.js';
 
 const TZ = 'America/Sao_Paulo';
 const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
@@ -25,7 +26,7 @@ const num = (v, d = 0) => (Number.isFinite(Number(v)) && v !== null && v !== '' 
 const digits = (s) => str(s).replace(/\D/g, '');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = (v) => 'R$ ' + r2(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const slugify = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 70) || 'produto';
+export const slugify = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 70) || 'produto';
 const ID = /^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 const TOKEN = /^[\w-]{40,50}$/;
 const STATUS = { novo: 'Recebido', orcamento: 'Orçamento enviado', producao: 'Em produção', arte: 'Aguardando sua aprovação da arte', enviado: 'Enviado', concluido: 'Concluído' };
@@ -33,7 +34,8 @@ const RASTER = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const UFS = new Set('AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' '));
 const httpsUrl = (u) => { const t = String(u || '').trim(); return /^https:\/\/[^\s<>"']{4,400}$/.test(t) ? t : ''; };
 
-// Vitrine inicial: os oito produtos ilustrados do site, em modo "orçamento" (o preço final é combinado).
+// Vitrine inicial: os oito produtos ilustrados do site. Os físicos têm preço fixo (política de outubro de 2026);
+// os digitais personalizados seguem sob orçamento. Mais os de "Material pronto", desligados até ter preço.
 export const SEED_PRODUCTS = [
   ['planner', 'Planner personalizado', 'Organização', 45, 90, 'Planner em brochura com o seu nome na capa, divisórias e folhas para planejar a semana e o mês.'],
   ['agenda', 'Agenda personalizada', 'Personalizado', 45, 85, 'Agenda do ano com capa personalizada, elástico e fita marcadora.'],
@@ -44,7 +46,15 @@ export const SEED_PRODUCTS = [
   ['slides', 'Slides de formação', 'Educacional', 35, 90, 'Apresentação pronta para a sua formação continuada, com tópicos e visual cuidado.'],
   ['convites', 'Convites e cartazes', 'Arte digital', 20, 50, 'Arte digital personalizada para convites, cartazes e comunicados.'],
 ].map(([img, name, cat, min, max, desc], i) => ({ id: 'prd_' + img, data: { name, slug: slugify(name), cat, desc, mode: 'orcamento', price: 0, min, max, imgs: ['/assets/produtos/' + img + '.svg'], vars: [], pers: '', stock: null,
-  peso: 300, c: 25, l: 18, a: 3, digital: ['pdf', 'slides', 'convites'].includes(img), on: true, vitrine: true, ord: i + 1 } }));
+  peso: 300, c: 25, l: 18, a: 3, digital: ['pdf', 'slides', 'convites'].includes(img), on: true, vitrine: true, ord: i + 1 } }))
+  .map(p => { const f = PRECOS_2026_10.find(x => x.id === p.id); return f ? { id: p.id, data: { ...p.data, name: f.name, slug: slugify(f.name), mode: 'compra', price: f.price, min: 0, max: 0, vars: f.vars, pers: f.pers, tiers: f.tiers || [], desc: f.desc || p.data.desc } } : p; })
+  .concat(MATERIAL_PRONTO.map(m => ({ id: m.id, data: { ...m.data, slug: slugify(m.name) } })));
+
+// Preço unitário base para uma quantidade: o maior degrau atingido (nunca mais caro que o preço vigente).
+export function baseForQty(unit, tiers, qty) {
+  let b = unit; for (const t of tiers || []) if (qty >= t.min) b = Math.min(unit, t.price);
+  return b;
+}
 
 function imgUrl(v) {
   const s = String(v || '');
@@ -68,7 +78,7 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
     const [rows, loja, cats] = await Promise.all([repo.docList('products'), repo.docGet('settings', 'loja'), repo.docList('catalog')]);
     // Produto sob orçamento com o mesmo nome de um item do Catálogo segue o Catálogo: mesma faixa de preço e mesmo liga/desliga.
     const inCatalog = new Map(); for (const c of cats) for (const i of (Array.isArray(c.data?.items) ? c.data.items : [])) if (i && clean(i.name, 120)) inCatalog.set(clean(i.name, 120).toLowerCase(), i);
-    const day = today(), slugs = new Set(), assets = new Set(), list = [];
+    const day = today(), slugs = new Set(), assets = new Set(), list = [], aliases = new Map();
     const sorted = rows.map(r => ({ id: r.id, d: r.data || {} })).sort((a, b) => num(a.d.ord, 999) - num(b.d.ord, 999) || String(a.d.name).localeCompare(String(b.d.name), 'pt-BR'));
     for (const { id, d } of sorted) {
       const name = clean(d.name, 120); if (!name || d.on === false) continue;
@@ -78,18 +88,24 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
       const imgs = (Array.isArray(d.imgs) ? d.imgs : []).map(imgUrl).filter(Boolean).slice(0, 6);
       for (const i of imgs) if (i.asset) assets.add(i.asset);
       let slug = slugify(d.slug || name); for (let n = 2; slugs.has(slug); n++) slug = slugify(d.slug || name).slice(0, 66) + '-' + n; slugs.add(slug);
-      list.push({ id, slug, name, cat: clean(d.cat, 40), desc: cleanText(d.desc, 1200), mode, price, unit: promoOn ? r2(d.promo.price) : price, promoOn: !!promoOn,
+      for (const a of (Array.isArray(d.slugsAntigos) ? d.slugsAntigos : []).slice(0, 10)) { const k = slugify(str(a)); if (k && k !== slug && !aliases.has(k)) aliases.set(k, slug); }   // endereço antigo leva ao novo
+      const unit = promoOn ? r2(d.promo.price) : price;
+      // Preço por quantidade: degraus "a partir de N unidades", sempre mais baratos que o preço vigente.
+      const tiers = mode !== 'compra' ? [] : (Array.isArray(d.tiers) ? d.tiers : []).map(t => ({ min: Math.floor(num(t?.min)), price: r2(t?.price) }))
+        .filter(t => t.min >= 2 && t.min <= 999 && t.price > 0 && t.price < unit).sort((a, b) => a.min - b.min).filter((t, i, a) => i === 0 || t.min !== a[i - 1].min).slice(0, 5);
+      list.push({ id, slug, name, cat: clean(d.cat, 40), desc: cleanText(d.desc, 1200), mode, price, unit, promoOn: !!promoOn, tiers, custo: Math.max(0, r2(d.custo)),
         min: mode === 'compra' ? 0 : Math.max(0, r2(twin ? twin.min : d.min)), max: mode === 'compra' ? 0 : Math.max(0, r2(twin ? twin.max : d.max)), imgs: imgs.map(i => i.url),
-        vars: (Array.isArray(d.vars) ? d.vars : []).slice(0, 4).map(v => ({ nome: clean(v?.nome, 40), ops: (Array.isArray(v?.ops) ? v.ops : []).slice(0, 20).map(o => ({ n: clean(o?.n, 40), add: Math.max(0, r2(o?.add)) })).filter(o => o.n) })).filter(v => v.nome && v.ops.length),
+        vars: (Array.isArray(d.vars) ? d.vars : []).slice(0, 4).map(v => ({ nome: clean(v?.nome, 40), ops: (Array.isArray(v?.ops) ? v.ops : []).slice(0, 20).map(o => ({ n: clean(o?.n, 40), add: Math.max(0, r2(o?.add)), custo: Math.max(0, r2(o?.custo)) })).filter(o => o.n) })).filter(v => v.nome && v.ops.length),
         pers: clean(d.pers, 60), stock: typeof d.stock === 'number' && Number.isFinite(d.stock) ? Math.max(0, Math.floor(d.stock)) : null,
         peso: Math.min(30000, Math.max(1, num(d.peso, 300))), c: Math.min(100, Math.max(1, num(d.c, 25))), l: Math.min(100, Math.max(1, num(d.l, 18))), a: Math.min(100, Math.max(1, num(d.a, 3))),
         digital: !!d.digital, vitrine: d.vitrine !== false });
     }
-    cache = { at: Date.now(), list, assets, loja: loja && typeof loja === 'object' ? loja : {} };
+    cache = { at: Date.now(), list, assets, aliases, loja: loja && typeof loja === 'object' ? loja : {} };
     return cache;
   }
   const pub = (p) => ({ id: p.id, slug: p.slug, nome: p.name, categoria: p.cat, descricao: p.desc, modo: p.mode, preco: p.unit, precoDe: p.promoOn ? p.price : null, min: p.min, max: p.max, imagens: p.imgs,
     variacoes: p.vars.map(v => ({ nome: v.nome, opcoes: v.ops.map(o => ({ nome: o.n, acrescimo: o.add })) })), personalizacao: p.pers,
+    faixasQtd: p.tiers.map(t => ({ min: t.min, preco: t.price })),
     disponivel: p.stock === null || p.stock > 0, restam: p.stock !== null && p.stock > 0 && p.stock <= 5 ? p.stock : null, digital: p.digital, vitrine: p.vitrine });
   // Usado pelo pedido de orçamento: um produto da vitrine também pode entrar no orçamento.
   async function findByName(name) {
@@ -102,20 +118,23 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
     const arr = Array.isArray(raw) ? raw.slice(0, 21) : [];
     if (!arr.length) return { erro: 'Escolha pelo menos um produto.', campo: 'itens' };
     if (arr.length > 20) return { erro: 'A compra pode ter no máximo 20 itens.', campo: 'itens' };
-    const itens = [], qtyBy = {};
+    const lines = [], qtyBy = {};
     for (const it of arr) {
-      const p = list.find(x => x.id === String(it?.id || ''));
+      const p = list.find(x => x.id === str(it?.id));
       if (!p) return { erro: 'Um dos produtos saiu da loja. Volte à loja e monte o pedido de novo.', campo: 'itens' };
       if (p.mode !== 'compra') return { erro: `"${p.name}" é vendido sob orçamento. Peça o orçamento pelo site ou pelo WhatsApp.`, campo: 'itens' };
       const qtd = Math.floor(Number(it?.qtd)); if (!(qtd >= 1 && qtd <= 99)) return { erro: 'A quantidade de cada produto deve ficar entre 1 e 99.', campo: 'itens' };
-      const chosen = it?.vars && typeof it.vars === 'object' && !Array.isArray(it.vars) ? it.vars : {}, vars = []; let unit = p.unit;
-      for (const v of p.vars) { const o = v.ops.find(x => x.n === String(chosen[v.nome] ?? '')); if (!o) return { erro: `Escolha "${v.nome}" em "${p.name}".`, campo: 'itens' }; vars.push([v.nome, o.n]); unit = r2(unit + o.add); }
+      const chosen = it?.vars && typeof it.vars === 'object' && !Array.isArray(it.vars) ? it.vars : {}, vars = []; let add = 0, custo = p.custo;
+      for (const v of p.vars) { const o = v.ops.find(x => x.n === str(chosen[v.nome])); if (!o) return { erro: `Escolha "${v.nome}" em "${p.name}".`, campo: 'itens' }; vars.push([v.nome, o.n]); add = r2(add + o.add); custo = r2(custo + o.custo); }
       const pers = p.pers ? clean(it?.pers, 120) : '';
       if (p.pers && !pers) return { erro: `Preencha "${p.pers}" em "${p.name}".`, campo: 'itens' };
       qtyBy[p.id] = (qtyBy[p.id] || 0) + qtd;
       if (p.stock !== null && qtyBy[p.id] > p.stock) return { erro: p.stock > 0 ? `Só restam ${p.stock} unidade(s) de "${p.name}".` : `"${p.name}" está esgotado no momento.`, campo: 'itens', status: 409 };
-      itens.push({ id: p.id, nome: p.name, qtd, unit, vars, pers, digital: p.digital, peso: p.peso, c: p.c, l: p.l, a: p.a, controla: p.stock !== null });
+      lines.push({ p, qtd, vars, pers, add, custo });
     }
+    // O degrau de quantidade vale para o total do mesmo produto no carrinho, somando todas as opções; as opções somam depois.
+    const itens = lines.map(({ p, qtd, vars, pers, add, custo }) => ({ id: p.id, nome: p.name, qtd, unit: r2(baseForQty(p.unit, p.tiers, qtyBy[p.id]) + add), vars, pers, custo,
+      digital: p.digital, peso: p.peso, c: p.c, l: p.l, a: p.a, controla: p.stock !== null }));
     return { itens, subtotal: r2(itens.reduce((a, i) => a + i.unit * i.qtd, 0)), digital: itens.every(i => i.digital) };
   }
 
@@ -244,7 +263,7 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
 
     api.get('/produtos', async (_req, res) => { res.set('Cache-Control', 'public, max-age=60'); res.json({ produtos: (await load()).list.map(pub) }); });
     api.get('/produtos/:slug', async (req, res) => {
-      const p = (await load()).list.find(x => x.slug === req.params.slug);
+      const c = await load(), slug = c.aliases.get(req.params.slug) || req.params.slug, p = c.list.find(x => x.slug === slug);
       if (!p) return res.status(404).json({ erro: 'Produto não encontrado.' });
       res.set('Cache-Control', 'public, max-age=60'); res.json({ produto: pub(p) });
     });
@@ -331,7 +350,7 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
           if (found && !found.data.siteUser) clientId = found.id;
         }
         const numero = await repo.nextOrderNum(), id = 'pl_' + crypto.randomBytes(12).toString('hex'), pubToken = crypto.randomBytes(32).toString('base64url');
-        const itens = chk.itens.map(i => ({ id: i.id, nome: i.nome, qtd: i.qtd, unit: i.unit, vars: i.vars, pers: i.pers }));
+        const itens = chk.itens.map(i => ({ id: i.id, nome: i.nome, qtd: i.qtd, unit: i.unit, vars: i.vars, pers: i.pers, ...(i.custo > 0 ? { custo: i.custo } : {}) }));   // custo: só para a margem no painel
         const resumo = itens.length === 1 ? itens[0].nome : `${itens.length} produtos: ${itens.map(i => i.nome).join(', ')}`.slice(0, 160);
         const detalhes = itens.map(i => `${i.qtd} × ${i.nome}${i.vars.length ? ' (' + i.vars.map(v => v[0] + ': ' + v[1]).join(', ') + ')' : ''}${i.pers ? ' — personalização: ' + i.pers : ''}`).join('\n');
         const nota = `Compra pelo site: pedido #${numero} (${money(total)}).`, novaFicha = !clientId;
@@ -398,7 +417,9 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
     let tpl = null;
     app.get('/produto/:slug', async (req, res) => {
       tpl ??= fs.readFileSync(path.join(SITE_DIR, 'produto.html'), 'utf8');
-      const p = (await load()).list.find(x => x.slug === req.params.slug), base = baseUrl(req);
+      const c = await load(), moved = c.aliases.get(req.params.slug);
+      if (moved) return res.redirect(301, '/produto/' + moved);   // o produto mudou de nome: o endereço antigo continua funcionando
+      const p = c.list.find(x => x.slug === req.params.slug), base = baseUrl(req);
       const title = p ? `${p.name} | ESRO Papelaria` : 'Produto não encontrado | ESRO Papelaria', desc = p ? (p.desc || `${p.name} na ESRO Papelaria.`).replace(/\s+/g, ' ').slice(0, 180) : 'Este produto não está mais disponível.';
       const img = p?.imgs[0] ? base + p.imgs[0] : base + '/assets/esro-contato.jpg';
       const priceTxt = !p ? '' : p.mode === 'compra' ? money(p.unit) : p.min || p.max ? (p.min === p.max ? money(p.min) : `${money(p.min)} a ${money(p.max)}`) : 'Sob consulta';

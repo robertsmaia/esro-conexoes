@@ -479,3 +479,14 @@ test('Monitoramento: visitas sem cookies nem IP, funil do site, atendimento e In
   // Atendimento: mensagens por dia e tempo de resposta saem do que os webhooks gravaram
   assert.ok(m.atendimento.conversas >= 1); assert.equal(m.atendimento.porDia.length, 7); assert.equal(typeof m.atendimento.naoLidas, 'number');
 });
+
+test('Loja: preço por quantidade e variações vêm do painel e são conferidos no servidor', async () => {
+  const c = await login(), site = (m, p, b) => fetch(base + '/api' + p, { method: m, headers: H, body: b ? JSON.stringify(b) : undefined });
+  await api('PUT', '/db/products/prd_bloco_teste', { name: 'Bloco de teste', mode: 'compra', price: 18, on: true, tiers: [{ min: 10, price: 15 }, { min: 50, price: 13 }],
+    vars: [{ nome: 'Capa', ops: [{ n: 'Simples', add: 0 }, { n: 'Dura', add: 17 }] }], pers: '' }, c);
+  const p = (await (await site('GET', '/produtos/bloco-de-teste')).json()).produto; assert.deepEqual(p.faixasQtd, [{ min: 10, preco: 15 }, { min: 50, preco: 13 }]);
+  const sub = async (q, capa) => (await (await site('POST', '/frete', { itens: [{ id: 'prd_bloco_teste', qtd: q, vars: { Capa: capa } }] })).json()).subtotal;
+  assert.deepEqual([await sub(9, 'Simples'), await sub(10, 'Simples'), await sub(12, 'Simples'), await sub(10, 'Dura'), await sub(50, 'Simples'), await sub(60, 'Dura')], [162, 150, 180, 320, 650, 1800]);
+  assert.equal((await site('POST', '/frete', { itens: [{ id: 'prd_bloco_teste', qtd: 3, vars: { Capa: 'Ouro' } }] })).status, 422);
+  await api('DELETE', '/db/products/prd_bloco_teste', undefined, c);
+});
