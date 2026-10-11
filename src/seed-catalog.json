@@ -278,35 +278,35 @@
  {
   "id": "c07",
   "data": {
-   "d": "Produtos físicos em brochura, com capa personalizada e acabamento artesanal",
+   "d": "Produtos físicos com capa personalizada e acabamento artesanal. Preço fixo por unidade",
    "items": [
     {
-     "max": 85,
-     "min": 45,
-     "name": "Agenda personalizada",
+     "max": 59.9,
+     "min": 59.9,
+     "name": "Agenda personalizada 2027",
      "on": true
     },
     {
-     "max": 90,
-     "min": 45,
+     "max": 59.9,
+     "min": 59.9,
      "name": "Planner personalizado",
      "on": true
     },
     {
-     "max": 30,
-     "min": 15,
-     "name": "Bloquinho em brochura",
+     "max": 18,
+     "min": 18,
+     "name": "Bloquinho personalizado",
      "on": true
     },
     {
-     "max": 55,
-     "min": 25,
-     "name": "Caderno em brochura",
+     "max": 42,
+     "min": 42,
+     "name": "Caderno personalizado",
      "on": true
     },
     {
-     "max": 35,
-     "min": 15,
+     "max": 39.9,
+     "min": 39.9,
      "name": "Capa de caderneta de vacinação",
      "on": true
     }

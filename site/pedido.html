@@ -55,6 +55,27 @@
             </section>
           </div>
         </div>
+        <section class="card dep-form" id="depBox" aria-labelledby="depT" hidden>
+          <h2 id="depT">Conte como foi</h2>
+          <p>Gostou do seu pedido? O seu depoimento ajuda outras professoras e famílias a conhecer a ESRO.</p>
+          <form id="depForm" novalidate>
+            <div class="row2">
+              <label class="field"><span class="lab">Como o seu nome deve aparecer</span>
+                <span class="line"><input type="text" id="dp-nome" name="nome" maxlength="40" autocomplete="off" placeholder="Ex.: Ana S." aria-describedby="dp-nome-err"></span>
+                <small class="err" id="dp-nome-err" hidden></small></label>
+              <label class="field"><span class="lab">Cidade <small>opcional</small></span>
+                <span class="line"><input type="text" id="dp-cidade" name="cidade" maxlength="40" autocomplete="address-level2"></span></label>
+            </div>
+            <label class="field"><span class="lab">Seu depoimento</span>
+              <span class="line"><textarea id="dp-texto" name="texto" rows="4" maxlength="600" aria-describedby="dp-texto-err"></textarea></span>
+              <small class="err" id="dp-texto-err" hidden></small></label>
+            <label class="check"><input type="checkbox" id="dp-aceite" aria-describedby="dp-aceite-err"><span>Autorizo a ESRO a publicar este depoimento no site e nas redes sociais, com o nome e a cidade que escrevi acima.</span></label>
+            <small class="err" id="dp-aceite-err" hidden></small>
+            <input class="hp" type="text" name="site" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <p class="msg" role="status" hidden></p>
+            <div class="actions"><button class="btn primary" type="submit">Enviar depoimento</button></div>
+          </form>
+        </section>
         <p class="save-link">Guarde este endereço: é por ele que você acompanha o pedido. Quem tiver o link vê as informações desta página.</p>
       </div>
     </div>

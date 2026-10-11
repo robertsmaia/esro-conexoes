@@ -83,12 +83,44 @@
     $('#title').textContent = 'Pedido nº ' + p.numero;
     $('#when').textContent = (p.cliente ? p.cliente + ', a' : 'A') + 'qui está o seu pedido' + (p.data ? ' de ' + new Date(p.data).toLocaleDateString('pt-BR') : '') + '.';
     $('#waBtn').href = WA + '?text=' + encodeURIComponent('Olá, ESRO! Quero falar sobre o pedido nº ' + p.numero + '.');
-    steps(p); items(p); shipping(p); payment(p);
+    steps(p); items(p); shipping(p); payment(p); if (typeof depoimento === 'function') depoimento(p);
     $('#loading').hidden = true; $('#content').hidden = false;
     clearTimeout(timer);   // enquanto falta pagar, confere de novo de tempos em tempos (por até 20 minutos)
     if (p.falta > 0 && polls < 40) timer = setTimeout(function () { polls++; if (document.visibilityState === 'visible') get(false).then(render).catch(function () { }); else render(p); }, 30000);
   }
-  get(true).then(function (p) { render(p); $('#title').focus(); }).catch(function (e) {
+  /* ---------- Depoimento: aparece depois que o pedido é enviado; fica em revisão até a ESRO aprovar ---------- */
+  var depAsked = false;
+  function depoimento(p) {
+    if (depAsked || ['enviado', 'concluido'].indexOf(p.status) < 0) return; depAsked = true;
+    fetch('/api/depoimentos/pedido/' + encodeURIComponent(token), { headers: { 'X-ESRO': '1' }, credentials: 'omit', cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d) return; var box = $('#depBox'); box.hidden = false;
+      if (d.enviado) { done(d.status === 'publicado' ? 'Seu depoimento já está no site. Obrigada!' : 'Recebemos o seu depoimento. Ele aparece no site depois que a ESRO revisar. Obrigada!'); return; }
+      if (p.cliente) { var nm = String(p.cliente).trim().split(/\s+/); $('#dp-nome').value = nm[0] + (nm.length > 1 ? ' ' + nm[nm.length - 1].charAt(0).toUpperCase() + '.' : ''); }
+    }).catch(function () { });
+  }
+  function done(text) { var f = $('#depForm'); f.hidden = true; var m = el('p', 'msg good', text); m.setAttribute('role', 'status'); $('#depBox').appendChild(m); }
+  function fieldErr(id, t) { var b = $('#dp-' + id + '-err'), i = $('#dp-' + id); b.textContent = t; b.hidden = false; if (i) { i.setAttribute('aria-invalid', 'true'); i.focus(); } }
+  $('#dp-aceite').addEventListener('change', function () { if (this.checked) $('#dp-aceite-err').hidden = true; });
+  $('#depForm').addEventListener('submit', async function (ev) {
+    ev.preventDefault(); var f = ev.target, btn = f.querySelector('button[type=submit]'), msg = f.querySelector('.msg');
+    Array.prototype.forEach.call(f.querySelectorAll('.err'), function (b) { b.hidden = true; }); Array.prototype.forEach.call(f.querySelectorAll('[aria-invalid]'), function (i) { i.removeAttribute('aria-invalid'); }); msg.hidden = true;
+    var nome = $('#dp-nome').value.trim(), texto = $('#dp-texto').value.trim();
+    if (nome.length < 2) return fieldErr('nome', 'Escreva como o seu nome deve aparecer.');
+    if (texto.length < 20) return fieldErr('texto', 'Conte um pouco mais: pelo menos 20 letras.');
+    if (!$('#dp-aceite').checked) return fieldErr('aceite', 'Para publicar, marque a autorização.');
+    btn.disabled = true;
+    try {
+      var r = await fetch('/api/depoimentos', { method: 'POST', headers: { 'X-ESRO': '1', 'Content-Type': 'application/json' }, credentials: 'omit',
+        body: JSON.stringify({ token: token, nome: nome, cidade: $('#dp-cidade').value.trim(), texto: texto, aceite: true, site: f.elements.site.value }) });
+      var j = {}; try { j = await r.json(); } catch (_) { }
+      if (r.ok || r.status === 409) return done(r.ok ? 'Recebemos o seu depoimento. Ele aparece no site depois que a ESRO revisar. Obrigada!' : j.erro);
+      if (j.campo && $('#dp-' + j.campo + '-err')) return fieldErr(j.campo, j.erro);
+      msg.className = 'msg bad'; msg.textContent = j.erro || 'Não foi possível enviar agora. Tente de novo.'; msg.hidden = false;
+    } catch (_) { msg.className = 'msg bad'; msg.textContent = 'Não foi possível falar com o servidor. Confira a internet.'; msg.hidden = false; }
+    finally { btn.disabled = false; }
+  });
+
+  get(true).then(function (p) { render(p); depoimento(p); $('#title').focus(); }).catch(function (e) {
     $('#loading').hidden = true; $('#notFound').hidden = false;
     if (e.status !== 404) $('#notFoundText').textContent = e.status === 429 ? 'Muitas consultas em pouco tempo. Aguarde um minuto e atualize a página.' : 'Não foi possível abrir o pedido agora. Confira a internet e atualize a página.';
   });

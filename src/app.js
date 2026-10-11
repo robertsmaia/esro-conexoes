@@ -12,6 +12,7 @@ import { makeAccounts } from './accounts.js';
 import { makeStore } from './store.js';
 import { makeShop } from './shop.js';
 import { makeMailer } from './mail.js';
+import { makeDepoimentos } from './depoimentos.js';
 
 const safeEq = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y); };
 
@@ -75,7 +76,8 @@ export function createApp({ cfg, repo, fetchImpl = fetch, log = console }) {
   const direct = makeShop({ cfg, repo, log, clientIp, counter, accounts, mailer, fetchImpl });
   if (hasSite) direct.mount(app, siteHeaders);
   // Loja: catálogo público, pedido de orçamento, novidades e contagem de visitas (/api/...), mais os números do Monitoramento.
-  const shop = makeStore({ cfg, repo, log, clientIp, counter, accounts, shop: direct, mailer, fetchImpl });
+  const depo = makeDepoimentos({ cfg, repo, log, clientIp, counter, mailer });   // depoimentos de clientes (só aparecem os aprovados no painel)
+  const shop = makeStore({ cfg, repo, log, clientIp, counter, accounts, shop: direct, depo, mailer, fetchImpl });
   if (hasSite) shop.mount(app);
   if (hasSite) app.use(express.static(SITE_DIR, { index: false, redirect: false, setHeaders: siteHeaders }));
 
@@ -211,7 +213,7 @@ export function makeTools({ cfg, repo, fetchImpl = fetch }) {
 }
 
 export function buildMcp(tools) {
-  const s = new McpServer({ name: 'esro-conexoes', version: '1.4.0' });
+  const s = new McpServer({ name: 'esro-conexoes', version: '1.5.0' });
   for (const [name, t] of Object.entries(tools)) {
     s.registerTool(name, { title: t.title, description: t.description, inputSchema: t.input, annotations: t.annotations }, async (args) => {
       try { return { content: [{ type: 'text', text: JSON.stringify(await t.run(args || {})) }] }; }

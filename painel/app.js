@@ -30,7 +30,7 @@ const shiftMonth = (d,n) => new Date(d.getFullYear(), d.getMonth()+n, 1);
 /* ---------- Estado ---------- */
 const S = { view:'overview', ch:'todos', q:'', orderMode:'kanban', lead:null, showChat:false, compose:'', pix:null, pixOpen:false, notifOpen:false,
   quote:[], quoteClient:'', quotePhone:'', ready:false, dbOk:null, canWrite:true, artOrder:'', inboxTab:'live', stockTab:'todos', cTab:'todos', cMode:'list', cOrigin:'', cashTab:'lanc', cashM:'', cashAcc:'', lojaTab:'produtos' };
-const D = { orders:[], leads:[], catalog:[], settings:{}, stock:[], clients:[], cash:[], accounts:[], products:[], coupons:[], loja:{} };
+const D = { orders:[], leads:[], catalog:[], settings:{}, stock:[], clients:[], cash:[], accounts:[], products:[], coupons:[], depoimentos:[], loja:{} };
 let DB=null, ASSETS=null, DL=null, ME=null;
 try{ const m=localStorage.getItem('esro-orderMode'); if(m) S.orderMode=m; const c=localStorage.getItem('esro-clientMode'); if(c) S.cMode=c; }catch(e){}
 
@@ -89,7 +89,7 @@ async function openAudit(){
 
 /* ---------- Backup completo (um arquivo com tudo) ---------- */
 const STANDALONE=!!window.ESRO_STANDALONE;   // true quando o painel roda no servidor próprio da ESRO, fora do claude.ai
-const BK_COLS=[['orders','Pedidos'],['clients','Clientes'],['leads','Atendimentos'],['stock','Estoque'],['cash','Fluxo de caixa e contas fixas'],['accounts','Contas bancárias'],['catalog','Catálogo'],['products','Produtos da loja'],['coupons','Cupons']];
+const BK_COLS=[['orders','Pedidos'],['clients','Clientes'],['leads','Atendimentos'],['stock','Estoque'],['cash','Fluxo de caixa e contas fixas'],['accounts','Contas bancárias'],['catalog','Catálogo'],['products','Produtos da loja'],['coupons','Cupons'],['depoimentos','Depoimentos']];
 const BK_ID=/^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 async function backupExport(){
   if(!S.ready){ toast('Aguarde os dados carregarem',1); return; }
@@ -165,6 +165,7 @@ function notifItems(){
   const db_=dueBills(); if(db_.length) n.push(['cash','wallet',`${db_.length} conta(s) a pagar vencida(s) ou de hoje`,db_.slice(0,2).map(x=>x.desc).join(', ')]);
   const ls=lowStock(); if(ls.length) n.push(['stock','package',`${ls.length} item(ns) do estoque para repor`,ls.slice(0,2).map(x=>x.name).join(', ')]);
   if(S.ready && S.canWrite && hasData() && (backupAge()==null||backupAge()>14)) n.push(['settings','shield-check','Faça um backup: exporte tudo para o Excel',backupAge()==null?'Nenhum backup feito ainda':`Último backup há ${backupAge()} dias`]);
+  const dp=D.depoimentos.filter(x=>x.status==='pendente'); if(dp.length&&canView('loja')) n.push(['loja','message-square-quote',`${dp.length} depoimento(s) para aprovar`,'Loja online → Depoimentos']);
   if(S.ready && !D.settings.pixKey) n.push(['settings','qr-code','Cadastre sua chave PIX para gerar cobranças','Configurações']);
   return n;
 }
@@ -259,7 +260,10 @@ function drawOverview(){
 /* ---------- Pedidos ---------- */
 function vOrders(){
   const list=D.orders.filter(o=>inCh(o)&&matchQ(o)).sort((a,b)=>(b.num||0)-(a.num||0));
-  const head=`${roBanner()}<div class="page-head"><div><h2>Pedidos unificados</h2><p>${list.length} pedido(s) ${S.ch==='todos'?'de todos os canais':'via '+CH[S.ch].long}${S.q?` · busca: “${esc(S.q)}”`:''}</p></div>
+  const mes=monthKey(new Date()), doMes=D.orders.filter(o=>(o.month||String(o.at||'').slice(0,7))===mes&&inCh(o)), mm=doMes.map(orderMargem), com=mm.filter(Boolean);
+  const totM=com.reduce((a,m)=>a+m.valor,0), totR=com.reduce((a,m)=>a+m.receita,0);
+  const head=`${roBanner()}<div class="page-head"><div><h2>Pedidos unificados</h2><p>${list.length} pedido(s) ${S.ch==='todos'?'de todos os canais':'via '+CH[S.ch].long}${S.q?` · busca: “${esc(S.q)}”`:''}</p>
+    <p class="hint" id="margemMes">Margem estimada de ${MONTHS[new Date().getMonth()]}: ${com.length?`<b style="color:var(--text)">${esc(fmt(totM))}</b> (${pct(totR?totM/totR:null)}) em ${com.length} de ${doMes.length} pedido(s)`:'cadastre o custo dos produtos para ver'}${com.length<doMes.length?` · ${doMes.length-com.length} sem custo`:''}</p></div>
     <div class="toolbar"><div class="seg"><button class="${S.orderMode==='kanban'?'on':''}" data-mode="kanban"><i data-lucide="columns-3"></i>Kanban</button><button class="${S.orderMode==='table'?'on':''}" data-mode="table"><i data-lucide="table-2"></i>Tabela</button></div><button class="btn" data-xl="orders"><i data-lucide="file-spreadsheet"></i>Exportar</button><button class="btn" data-print ${D.orders.length?'':'disabled'}><i data-lucide="printer"></i>Imprimir produção</button>
     <button class="btn primary" data-neworder ${S.canWrite?'':'disabled'}><i data-lucide="plus"></i>Novo pedido</button></div></div>`;
   const siteCard = L.site.length ? `<section class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><div><h3>Pedidos novos do site</h3><p class="hint">Pedidos de orçamento enviados pelo site. Confira, combine o valor com o cliente e importe para o painel.</p></div>${chBadge('site',L.site.length+' novo(s)')}</div><div class="list" style="margin-top:6px">${L.site.map(o=>{const p=siteOrderPreset(o);return `<div class="row"><div class="grow"><b>${esc(p.item)}</b><small>Web ${esc(p.ref)} · ${esc(p.client||'cliente sem nome')} · ${dtime(o.recebido_em)}</small></div><b class="tnum">${p.value?fmt(p.value):p.est?(p.est.min===p.est.max?fmt(p.est.min):fmt(p.est.min)+' a '+fmt(p.est.max)):''}</b>${S.canWrite?`<button class="btn sm primary" data-site-import="${o.id}"><i data-lucide="download"></i>Importar</button>`:''}</div>`}).join('')}</div></section>` : '';
@@ -268,8 +272,8 @@ function vOrders(){
   if(S.orderMode==='kanban') return head+siteCard+`<p class="hint" style="margin-top:-8px">Arraste os cartões entre as colunas para mudar o status, ou clique para ver e editar.</p><div class="kanban-wrap"><div class="kanban">${STATUS.map(s=>{const it=list.filter(o=>o.status===s.k);
       return `<div class="col" data-col="${s.k}"><div class="col-head"><span class="bar" style="background:${s.c}"></span>${s.l}<span class="n">${it.length}</span></div>
       ${it.map(o=>`<button class="ocard" draggable="${S.canWrite}" data-drag="${o.id}" data-open="${o.id}"><div class="l1"><span class="id">#${o.num} · ${dshort(o.at)}</span>${chBadge(o.ch, ref(o))}</div><div class="item">${esc(o.item)}</div><div class="cl">${esc(o.client)}</div><div class="l3"><span class="v tnum">${fmt(o.value)}</span>${payBadge(o.payS)}</div>${dueState(o)?`<div>${dueBadge(o)}</div>`:''}${(o.files||[]).length?`<small class="cl" style="display:flex;gap:4px;align-items:center"><i data-lucide="paperclip" style="width:13px;height:13px"></i>${o.files.length} anexo(s)</small>`:''}</button>`).join('')||`<div class="empty-col">Nenhum pedido aqui</div>`}</div>`}).join('')}</div></div>`;
-  return head+siteCard+`<div class="card" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Canal</th><th>Item</th><th>Tipo</th><th class="num">Valor</th><th>Pagamento</th><th>Status</th></tr></thead><tbody>
-    ${list.map(o=>`<tr data-open="${o.id}" tabindex="0"><td><b>#${o.num}</b><br><small style="color:var(--text2)">${dshort(o.at)}</small></td><td>${esc(o.client)}${dueState(o)?`<br>${dueBadge(o)}`:''}</td><td>${chBadge(o.ch,ref(o))}</td><td>${o.qty>1?`<b>${qfmt(o.qty)} ×</b> `:''}${esc(o.item)}</td><td><span class="badge b-neutral">${o.kind==='fisico'?'Físico':'Digital'}</span></td><td class="num"><b>${fmt(o.value)}</b></td><td>${esc(o.pay)} ${payBadge(o.payS)}</td><td><span class="badge" style="background:var(--sand-soft);color:var(--text)"><span class="dot" style="background:${(STATUS.find(s=>s.k===o.status)||STATUS[0]).c}"></span>${stLabel(o.status)}</span></td></tr>`).join('')||`<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:28px">Nenhum pedido encontrado.</td></tr>`}
+  return head+siteCard+`<div class="card" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Canal</th><th>Item</th><th>Tipo</th><th class="num">Valor</th><th class="num">Margem</th><th>Pagamento</th><th>Status</th></tr></thead><tbody>
+    ${list.map(o=>`<tr data-open="${o.id}" tabindex="0"><td><b>#${o.num}</b><br><small style="color:var(--text2)">${dshort(o.at)}</small></td><td>${esc(o.client)}${dueState(o)?`<br>${dueBadge(o)}`:''}</td><td>${chBadge(o.ch,ref(o))}</td><td>${o.qty>1?`<b>${qfmt(o.qty)} ×</b> `:''}${esc(o.item)}</td><td><span class="badge b-neutral">${o.kind==='fisico'?'Físico':'Digital'}</span></td><td class="num"><b>${fmt(o.value)}</b></td><td class="num">${margemBadge(orderMargem(o))}</td><td>${esc(o.pay)} ${payBadge(o.payS)}</td><td><span class="badge" style="background:var(--sand-soft);color:var(--text)"><span class="dot" style="background:${(STATUS.find(s=>s.k===o.status)||STATUS[0]).c}"></span>${stLabel(o.status)}</span></td></tr>`).join('')||`<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:28px">Nenhum pedido encontrado.</td></tr>`}
   </tbody></table></div></div>`;
 }
 
@@ -300,6 +304,7 @@ function openOrder(id, preset){
       <label>Situação do pagamento<select class="inp" id="f-payS" ${dis}>${opts([['Aguardando','Aguardando'],['Sinal pago','Sinal pago'],['Pago','Pago']],v.payS)}</select></label>
       <label>Valor do sinal (R$)<input class="inp tnum" id="f-sinal" type="number" min="0" step="0.01" value="${esc(v.sinal||'')}" placeholder="Se vazio, conta metade do valor" ${dis}></label>
       ${o?`<label>Recebido até agora<input class="inp tnum" value="${esc(fmt(paidOf(o)))}${dueOf(o)?' · falta '+esc(fmt(dueOf(o))):''}" disabled></label>`:''}
+      ${o?(()=>{ const m=orderMargem(o); return `<label>Margem estimada<input class="inp tnum" value="${m?esc(`${fmt(m.valor)} (${pct(m.pct)}) · custo ${fmt(m.custo)}`):'Sem custo cadastrado para este item'}" disabled></label>`; })():''}
       <label class="full">Observações / briefing<textarea class="inp" id="f-note" rows="3" ${dis}>${esc(v.note)}</textarea></label>
       ${o&&o.loja?orderLojaBox(o):''}
       ${o?`<div class="fieldset full"><h4>Envio e nota fiscal</h4><div class="form">
@@ -340,7 +345,7 @@ async function saveOrder(id){
   if(!item){ $('#f-item').focus(); toast('Informe o item do pedido',1); return; }
   if(!(value>=0)){ $('#f-value').focus(); toast('Informe o valor do pedido',1); return; }
   const data={ch:g('ch'),status:g('status'),client,contact:g('contact'),ref:g('ref'),city:g('city'),item,catN:g('cat'),kind:g('kind'),value,pay:g('pay'),payS:g('payS'),note:g('note'),sinal:r2(parseFloat($('#f-sinal').value)||0),qty:Math.max(1,parseFloat($('#f-qty').value)||1),due:$('#f-due').value||''};
-  if(id){ const prev=D.orders.find(x=>x.id===id); data.pays=orderPays(prev,data,new Date().toISOString());
+  if(id){ const prev=D.orders.find(x=>x.id===id); if(!okProducao(prev,data.status,data)) return; data.pays=orderPays(prev,data,new Date().toISOString());
     if($('#f-track')){ const u=k=>{ const t=$('#f-'+k).value.trim(); return /^https:\/\//i.test(t)?t:''; }; for(const k of ['trackUrl','nfUrl']) if($('#f-'+k).value.trim()&&!u(k)){ $('#f-'+k).focus(); toast('O link precisa começar com https://',1); return; }
       Object.assign(data,{track:g('track'),trackUrl:u('trackUrl'),nf:g('nf'),nfUrl:u('nfUrl')}); } if(await write(()=>DB.doc('orders/'+id).update(data),'Pedido atualizado')) closeModal(); return; }
   const now=new Date(); const num=D.orders.reduce((m,o)=>Math.max(m,+o.num||0),1000)+1;
@@ -814,11 +819,45 @@ let PE=null;   // produto em edição: { id, imgs:[...], old:[...] }
 const prodImg=u=>{ const s=String(u||''), m=/^asset:([a-f0-9]{24})$/.exec(s); return m?'/_blob/'+m[1]:/^\/assets\/[\w\-./]+$/.test(s)&&!s.includes('..')?s:''; };
 const promoOn=p=>p.mode==='compra'&&p.promo&&+p.promo.price>0&&+p.promo.price<+p.price&&(!p.promo.until||p.promo.until>=today());
 const catTwin=p=>p.mode==='compra'?null:catItems().find(i=>String(i.name).trim().toLowerCase()===String(p.name||'').trim().toLowerCase())||null;
-const prodPrice=p=>catTwin(p)?esc(priceTxt(catTwin(p))):p.mode==='compra'?(promoOn(p)?`${esc(fmt(p.promo.price))} <s style="color:var(--text2);font-weight:400">${esc(fmt(p.price))}</s>`:esc(fmt(p.price))):esc(priceTxt({min:+p.min||0,max:+p.max||0}));
+const prodPrice=p=>p.mode==='compra'&&!(+p.price>0)?'<span style="color:var(--text2);font-weight:600">preço a definir</span>':catTwin(p)?esc(priceTxt(catTwin(p))):p.mode==='compra'?(promoOn(p)?`${esc(fmt(p.promo.price))} <s style="color:var(--text2);font-weight:400">${esc(fmt(p.price))}</s>`:esc(fmt(p.price))):esc(priceTxt({min:+p.min||0,max:+p.max||0}));
 const slugOf=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,70)||'produto';
 const numBR=s=>{ const n=parseFloat(String(s??'').replace(/\s|R\$/g,'').replace(',','.')); return isNaN(n)?0:n; };
-const opsText=ops=>(ops||[]).map(o=>o.n+(+o.add>0?' +'+String(o.add).replace('.',','):'')).join('; ');
-const opsParse=t=>String(t||'').split(/[;\n]/).map(x=>x.trim()).filter(Boolean).map(x=>{ const m=/^(.*?)\s*\+\s*(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)$/.exec(x); return m?{n:m[1].trim(),add:numBR(m[2])}:{n:x,add:0}; }).filter(o=>o.n).slice(0,20);
+const brn=v=>String(r2(v)).replace('.',',');
+const opsText=ops=>(ops||[]).map(o=>o.n+(+o.add>0?' +'+brn(o.add):'')+(+o.custo>0?` [custo ${brn(o.custo)}]`:'')).join('; ');
+const opsParse=t=>String(t||'').split(/[;\n]/).map(x=>x.trim()).filter(Boolean).map(x=>{ let custo=0; x=x.replace(/\[\s*custo\s*(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*\]/i,(_,v)=>{ custo=numBR(v); return ''; }).trim();
+  const m=/^(.*?)\s*\+\s*(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)$/.exec(x); const o=m?{n:m[1].trim(),add:numBR(m[2])}:{n:x,add:0}; if(custo>0) o.custo=r2(custo); return o; }).filter(o=>o.n).slice(0,20);
+// Preço por quantidade: "10: 15,00; 50: 12,00" (a partir de 10 unidades, R$ 15,00 cada)
+const tiersText=t=>(t||[]).map(x=>`${x.min}: ${brn(x.price)}`).join('; ');
+const tiersParse=t=>String(t||'').split(/[;\n]/).map(x=>x.trim()).filter(Boolean).map(x=>{ const m=/^(\d+)\s*(?:un\.?|unidades)?\s*[:=]\s*(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)$/i.exec(x); return m?{min:+m[1],price:r2(numBR(m[2]))}:{erro:x}; });
+const tierBase=(p,q)=>{ let b=unitOf(p); for(const t of (p.tiers||[])) if(q>=t.min&&+t.price>0) b=Math.min(b,+t.price); return b; };
+const unitOf=p=>promoOn(p)?+p.promo.price:+p.price||0;
+// Margem: (preço − custo − preço × taxa) ÷ preço. Preço mínimo: custo ÷ (1 − taxa − margem mínima).
+const taxaF=()=>Math.max(0,+D.loja.taxaPct||0)/100, margemMinF=()=>Math.max(0,+D.loja.margemMinPct||0)/100;
+const margemDe=(preco,custo)=>preco>0?(preco-custo-preco*taxaF())/preco:null;
+const precoMin=custo=>{ const d=1-taxaF()-margemMinF(); return d>0?custo/d:Infinity; };
+const pct=v=>v==null?'—':`${Math.round(v*1000)/10}%`.replace('.',',');
+// Para cada combinação de uma opção por vez (e cada degrau), o pior caso; avisa se algum preço praticado fica abaixo do mínimo.
+function prodMargem(p){
+  if(p.mode!=='compra'||!(+p.price>0)) return null; const custo=+p.custo||0; if(!(custo>0)) return {semCusto:true};
+  const preco=unitOf(p), opcoes=[{add:0,custo:0}]; (p.vars||[]).forEach(v=>(v.ops||[]).forEach(o=>opcoes.push({add:+o.add||0,custo:+o.custo||0,n:o.n})));
+  const precos=[preco,...(p.tiers||[]).map(t=>Math.min(preco,+t.price)).filter(x=>x>0)];
+  let pior=null; for(const pr of precos) for(const o of opcoes){ const v=pr+o.add, c=custo+o.custo, m=margemDe(v,c), min=precoMin(c); if(!pior||m<pior.m) pior={m,v,c,min,o,pr}; }
+  return {margem:margemDe(preco,custo),pior,abaixo:pior.v<pior.min-0.004};
+}
+const prodByName=n=>D.products.find(x=>String(x.name||'').trim().toLowerCase()===String(n||'').trim().toLowerCase());
+// Margem estimada do pedido: receita sem o frete, custo dos itens (guardado na compra pelo site ou o custo atual do produto de mesmo nome).
+function orderMargem(o){
+  const l=o.loja, receita=l?r2((+l.total||0)-(l.frete&&!l.frete.combinar?+l.frete.valor||0:0)):+o.value||0; if(!(receita>0)) return null;
+  let custo=0;
+  if(l){ for(const i of (l.itens||[])){ let c=+i.custo; if(!(c>0)){ const p=D.products.find(x=>x.id===i.id); if(!p||!(+p.custo>0)) return null; c=+p.custo+(i.vars||[]).reduce((a,[g,n])=>{ const v=(p.vars||[]).find(x=>x.nome===g), op=v&&(v.ops||[]).find(x=>x.n===n); return a+(op&&+op.custo||0); },0); } custo+=c*(+i.qtd||1); } }
+  else { const p=prodByName(o.item); if(!p||!(+p.custo>0)) return null; custo=+p.custo*(+o.qty||1); }
+  const valor=r2(receita-custo-receita*taxaF()); return {receita,custo:r2(custo),valor,pct:valor/receita};
+}
+const margemBadge=m=>m==null?'<span class="badge b-neutral" title="Cadastre o custo do produto em Loja online">sem custo</span>':`<span class="badge ${m.pct<margemMinF()?'b-primary':'b-ok'}">${esc(fmt(m.valor))} · ${pct(m.pct)}</span>`;
+// Pedido físico sem pagamento e com sinal abaixo de 50%: pede confirmação antes de ir para a produção (não bloqueia).
+function okProducao(o,to,nova){ const v={...o,...(nova||{})}; if(to!=='producao'||o.status==='producao'||v.kind!=='fisico'||v.payS!=='Aguardando'||(+v.sinal||0)>=0.5*(+v.value||0)) return true;
+  return window.confirm(`O pedido #${v.num||''} ainda não tem pagamento confirmado nem sinal de 50% (${fmt(0.5*(+v.value||0))}).\n\nA política da ESRO é começar a produção só depois do PIX ou do sinal. Mover para "Em produção" mesmo assim?`); }
+
 const ordOf=p=>p.ord==null||p.ord===''||isNaN(+p.ord)?999:+p.ord;
 const prodList=()=>[...D.products].sort((a,b)=>ordOf(a)-ordOf(b)||String(a.name).localeCompare(String(b.name),'pt-BR'));
 const siteBase=()=>location.origin;
@@ -827,12 +866,13 @@ async function loadLojaStatus(){ if(!window.ESRO_API||LJ.loading) return; LJ.loa
   LJ.loading=false; if(S.view==='loja'&&S.lojaTab==='integr') render(); }
 const lojaDefaults=()=>({cepOrigem:'',retirada:{on:false,texto:''},faixas:[],gratisAcima:0,prazoProducao:0,combinar:true,emailPago:true,emailEnviado:true,...JSON.parse(JSON.stringify(D.loja||{}))});
 function readLojaForm(){ const f=LJ.form; if(!f||!$('#lj-cepOrigem')) return; const v=k=>$('#lj-'+k).value.trim(), c=k=>$('#lj-'+k).checked;
-  f.cepOrigem=v('cepOrigem'); f.retirada={on:c('retOn'),texto:v('retTexto')}; f.gratisAcima=numBR(v('gratis')); f.prazoProducao=Math.max(0,Math.floor(numBR(v('prazo')))); f.combinar=c('combinar'); f.emailPago=c('emailPago'); f.emailEnviado=c('emailEnviado');
+  f.cepOrigem=v('cepOrigem'); f.retirada={on:c('retOn'),texto:v('retTexto')}; f.gratisAcima=numBR(v('gratis')); f.prazoProducao=Math.max(0,Math.floor(numBR(v('prazo')))); f.combinar=c('combinar'); f.emailPago=c('emailPago'); f.emailEnviado=c('emailEnviado'); f.taxaPct=v('taxa')===''?'':r2(numBR(v('taxa'))); f.margemMinPct=v('margem')===''?'':r2(numBR(v('margem')));
   f.faixas=(f.faixas||[]).map((x,i)=>$('#lj-f'+i+'-nome')?{nome:$('#lj-f'+i+'-nome').value.trim(),de:$('#lj-f'+i+'-de').value.trim(),ate:$('#lj-f'+i+'-ate').value.trim(),valor:numBR($('#lj-f'+i+'-valor').value),prazo:$('#lj-f'+i+'-prazo').value.trim()}:x); }
 const copyLine=(label,value)=>`<label class="fl">${label}<span class="copyline"><input class="inp" readonly value="${esc(value)}"><button class="btn sm" data-copy="${esc(value)}"><i data-lucide="copy"></i>Copiar</button></span></label>`;
 
 function vLoja(){
-  const tabs=[['produtos','Produtos'],['cupons','Cupons'],['entrega','Entrega e avisos'],['integr','Integrações']]; const w=writes('products');
+  const pend=D.depoimentos.filter(x=>x.status==='pendente').length;
+  const tabs=[['produtos','Produtos'],['cupons','Cupons'],['depoimentos','Depoimentos'+(pend?` (${pend})`:'')],['entrega','Entrega, avisos e margem'],['integr','Integrações']]; const w=writes('products');
   const head=`<div class="page-head"><div><h2>Loja online</h2><p>Produtos com foto e compra direta, cupons, frete e as integrações do site.</p></div>
     <div class="toolbar"><div class="seg">${tabs.map(([k,l])=>`<button class="${S.lojaTab===k?'on':''}" data-ljtab="${k}">${l}</button>`).join('')}</div></div></div>`;
   if(S.lojaTab==='cupons'){ const list=[...D.coupons].sort((a,b)=>String(a.code).localeCompare(String(b.code)));
@@ -843,6 +883,15 @@ function vLoja(){
         <span class="mini"><b>${+c.used||0}</b>${+c.max>0?' de '+(+c.max):''} uso(s)</span>${c.to&&c.to<today()?'<span class="badge b-neutral">Vencido</span>':''}
         <button class="switch" role="switch" aria-checked="${c.on!==false}" data-cpon="${esc(c.id)}" ${w?'':'disabled'}><span class="tr"></span>${c.on!==false?'Ativo':'Desligado'}</button>${w?`<button class="btn sm" data-cpedit="${esc(c.id)}"><i data-lucide="pencil"></i>Editar</button>`:''}</div>`).join('')}</div>`
       :emptyState('ticket-percent','Nenhum cupom ainda','Crie um cupom de boas-vindas ou de frete grátis para divulgar no Instagram.')}</section>`; }
+  if(S.lojaTab==='depoimentos'){ const w2=writes('depoimentos'), ord=[...D.depoimentos].sort((a,b)=>({pendente:0,aprovado:1,oculto:2}[a.status]??3)-({pendente:0,aprovado:1,oculto:2}[b.status]??3)||String(b.at||'').localeCompare(String(a.at||'')));
+    const ST={pendente:['b-warn','Aguardando aprovação'],aprovado:['b-ok','No site'],oculto:['b-neutral','Oculto']}, ORI={site:'Pela página do pedido',whatsapp:'WhatsApp',instagram:'Instagram',pessoalmente:'Pessoalmente',email:'E-mail'};
+    return head+`<section class="card"><div class="card-top"><div><h3>Depoimentos de clientes</h3><p class="hint">Só os aprovados aparecem na página inicial do site (os 6 mais recentes). Sem nenhum aprovado, a seção fica escondida. O cliente escreve pela página do pedido depois que ele é marcado como “Enviado”; depoimentos recebidos pelo WhatsApp ou Instagram você cadastra aqui, com a autorização da pessoa.</p></div>${w2?'<button class="btn primary" data-dpnew><i data-lucide="plus"></i>Cadastrar depoimento</button>':''}</div>
+      ${ord.length?`<div class="list">${ord.map(d=>`<div class="row prow dep-row"><span class="pthumb"><i data-lucide="quote"></i></span><div class="grow"><b>${esc(d.nome)}${d.cidade?' · '+esc(d.cidade):''}</b><small style="white-space:normal">“${esc(d.texto)}”</small>
+        <small>${esc(ORI[d.origem]||'')}${d.pedido?` · pedido #${esc(d.pedido)}`:''}${d.produto?' · '+esc(d.produto):''} · ${dshort(d.at)}${d.verificado?' · compra verificada':''}</small></div>
+        <span class="badge ${ST[d.status]?.[0]||'b-neutral'}">${ST[d.status]?.[1]||esc(d.status)}</span>
+        ${w2?`${d.status!=='aprovado'?`<button class="btn sm primary" data-dpok="${esc(d.id)}"><i data-lucide="check"></i>Publicar</button>`:`<button class="btn sm" data-dphide="${esc(d.id)}"><i data-lucide="eye-off"></i>Ocultar</button>`}
+          <button class="btn sm" data-dpedit="${esc(d.id)}"><i data-lucide="pencil"></i>Editar</button>`:''}</div>`).join('')}</div>`
+      :emptyState('message-square-quote','Nenhum depoimento ainda','Quando um cliente escrever pela página do pedido, ele aparece aqui para você aprovar. Você também pode cadastrar um depoimento real recebido pelo WhatsApp ou Instagram.')}</section>`; }
   if(S.lojaTab==='entrega'){ if(!LJ.form) LJ.form=lojaDefaults(); const f=LJ.form, dis=writes('settings')?'':'disabled';
     return head+`<form id="ljForm" class="grid" style="gap:16px">
     <section class="card"><h3>Entrega</h3><p class="hint">O site mostra ao cliente as opções que valem para o CEP dele. Produtos digitais não têm frete.</p><div class="form" style="margin-top:12px">
@@ -857,6 +906,9 @@ function vLoja(){
           <label class="fl">Valor (R$)<input class="inp tnum" id="lj-f${i}-valor" type="number" min="0" step="0.01" value="${esc(x.valor??'')}" ${dis}></label><label class="fl">Prazo<input class="inp" id="lj-f${i}-prazo" maxlength="60" value="${esc(x.prazo||'')}" placeholder="até 3 dias úteis" ${dis}></label>${dis?'':`<button class="del" data-ljfdel="${i}" aria-label="Remover faixa"><i data-lucide="trash-2"></i></button>`}</div>`).join('')||'<p class="hint">Nenhuma faixa cadastrada.</p>'}
         ${dis?'':'<button class="btn sm" style="align-self:flex-start" data-ljfadd><i data-lucide="plus"></i>Adicionar faixa</button>'}</div>
     </div></section>
+    <section class="card"><h3>Custos e margem</h3><p class="hint">Usados para calcular a margem de cada produto e de cada pedido e para avisar quando um preço fica abaixo do mínimo. Margem = (preço − custo − preço × taxa) ÷ preço.</p><div class="form" style="margin-top:12px">
+      <label>Taxas de pagamento e plataforma (%)<input class="inp tnum" id="lj-taxa" type="number" min="0" max="50" step="0.01" value="${esc(f.taxaPct??'')}" placeholder="Ex.: 4,99" ${dis}><small class="hint">Média do que o Mercado Pago, a maquininha ou o marketplace cobram por venda.</small></label>
+      <label>Margem mínima (%)<input class="inp tnum" id="lj-margem" type="number" min="0" max="90" step="0.5" value="${esc(f.margemMinPct??'')}" placeholder="Ex.: 40" ${dis}><small class="hint">Preço mínimo = custo ÷ (1 − taxa − margem mínima).</small></label></div></section>
     <section class="card"><h3>Avisos por e-mail ao cliente</h3><p class="hint">Funcionam quando o envio de e-mails está ligado (aba Integrações) e o cliente informou o e-mail. O aviso de “pedido recebido” é sempre enviado nas compras pelo site.</p>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px"><label class="chk"><input type="checkbox" id="lj-emailPago" ${f.emailPago!==false?'checked':''} ${dis}>Avisar quando o pagamento for confirmado</label>
       <label class="chk"><input type="checkbox" id="lj-emailEnviado" ${f.emailEnviado!==false?'checked':''} ${dis}>Avisar quando o pedido for marcado como “Enviado” (com o código de rastreio, se houver)</label></div></section>
@@ -879,11 +931,17 @@ function vLoja(){
       ${card('share-2','var(--ig-soft)','var(--ig)','Canais de venda','Instagram e Facebook Shop, Google Merchant Center','<span class="badge b-ok">Pronto para usar</span>',
         `<p class="hint">Esta lista traz os produtos de <b>compra direta</b> que têm <b>foto</b> (JPG, PNG ou WebP). Cadastre o endereço no Gerenciador de Comércio da Meta ou no Google Merchant Center como “feed de dados programado”.</p>${copyLine('Lista de produtos (feed)',st.feed)}${copyLine('Mapa do site para o Google',st.sitemap)}`)}
     </section>`; }
-  const list=prodList(), buy=list.filter(p=>p.mode==='compra').length, onN=list.filter(p=>p.on!==false).length;
-  return head+`<section class="card"><div class="card-top"><div><h3>Produtos da vitrine</h3><p class="hint">${onN} de ${list.length} no site · ${buy} com compra direta. Produto “sob orçamento” entra no pedido de orçamento; com preço fixo, o cliente compra e paga pelo site.</p></div>${w?'<button class="btn primary" data-pnew><i data-lucide="plus"></i>Novo produto</button>':''}</div>
+  const list=prodList(), buy=list.filter(p=>p.mode==='compra'&&+p.price>0).length, onN=list.filter(p=>p.on!==false).length;
+  const vazio=v=>v===undefined||v===null||v==='', semTaxa=vazio(D.loja.taxaPct)||vazio(D.loja.margemMinPct);
+  const baixos=list.filter(p=>{ const m=prodMargem(p); return m&&m.abaixo; });
+  return head+(baixos.length?`<div class="banner crit"><i data-lucide="alert-triangle"></i><div><b>${baixos.length} produto(s) com preço abaixo do mínimo:</b> ${esc(baixos.map(p=>p.name).join(', '))}. Confira o preço, os degraus por quantidade e o custo.</div></div>`:'')
+    +(semTaxa?`<div class="banner"><i data-lucide="percent"></i><div>Para a margem ficar certa, informe a <b>taxa de pagamento</b> e a <b>margem mínima</b> em <b>Loja online → Entrega, avisos e margem</b>.</div></div>`:'')
+    +`<section class="card"><div class="card-top"><div><h3>Produtos da vitrine</h3><p class="hint">${onN} de ${list.length} no site · ${buy} com compra direta. Produto “sob orçamento” entra no pedido de orçamento; com preço fixo, o cliente compra e paga pelo site.</p></div>${w?'<button class="btn primary" data-pnew><i data-lucide="plus"></i>Novo produto</button>':''}</div>
     ${list.length?`<div class="list">${list.map(p=>{ const img=prodImg((p.imgs||[])[0]); const st=p.stock==null?'':+p.stock<=0?'<span class="badge b-primary">Esgotado</span>':`<span class="mini"><b>${+p.stock}</b> em estoque</span>`;
       return `<div class="row prow ${p.on===false?'off':''}"><span class="pthumb">${img?`<img src="${esc(img)}" alt="">`:'<i data-lucide="image"></i>'}</span><div class="grow"><b>${esc(p.name)}</b><small>${esc(p.cat||'Sem categoria')} · ${p.mode==='compra'?'Compra direta':'Sob orçamento'}${p.digital?' · digital':''}${p.vitrine===false?' · fora da página inicial':''}${catTwin(p)&&catTwin(p).on===false?' · oculto no Catálogo':''}</small></div>
-        ${st}<b class="tnum pprice">${prodPrice(p)}</b><button class="switch" role="switch" aria-checked="${p.on!==false}" data-pon="${esc(p.id)}" ${w?'':'disabled'}><span class="tr"></span>${p.on!==false?'No site':'Oculto'}</button>
+        ${st}${(()=>{ const m=prodMargem(p); if(!m) return ''; if(m.semCusto) return '<span class="badge b-neutral" title="Cadastre o custo para ver a margem">sem custo</span>';
+          return m.abaixo?`<span class="badge b-crit" title="Pior caso: ${esc(fmt(m.pior.v))}${m.pior.o.n?' com '+esc(m.pior.o.n):''}; custo ${esc(fmt(m.pior.c))}">Abaixo do mínimo · mín. ${esc(fmt(m.pior.min))}</span>`:`<span class="badge b-ok" title="Margem no preço cheio">Margem ${pct(m.margem)}</span>`; })()}
+        ${p.tiers&&p.tiers.length?`<span class="mini" title="Preço por quantidade">${p.tiers.map(t=>`${t.min}+ un. ${esc(fmt(t.price))}`).join(' · ')}</span>`:''}<b class="tnum pprice">${prodPrice(p)}</b><button class="switch" role="switch" aria-checked="${p.on!==false}" data-pon="${esc(p.id)}" ${w?'':'disabled'}><span class="tr"></span>${p.on!==false?'No site':'Oculto'}</button>
         ${w?`<button class="btn sm" data-pedit="${esc(p.id)}"><i data-lucide="pencil"></i>Editar</button>`:''}</div>`; }).join('')}</div>`
     :emptyState('store','Nenhum produto ainda','Cadastre o primeiro produto com foto e preço para ele aparecer na vitrine do site.')}</section>`;
 }
@@ -904,13 +962,16 @@ function openProduct(id){
       <div class="fieldset full" id="pr-buy" ${v.mode==='compra'?'':'hidden'}><h4>Preço</h4><div class="form">
         <label><span>Preço (R$) <span class="req">*</span></span><input class="inp tnum" id="pr-price" type="number" min="0" step="0.01" value="${esc(v.price||'')}"></label>
         <label>Preço promocional (R$)<input class="inp tnum" id="pr-promo" type="number" min="0" step="0.01" value="${esc(v.promo&&v.promo.price||'')}" placeholder="Vazio = sem promoção"></label>
-        <label>Promoção vale até<input class="inp" id="pr-until" type="date" value="${esc(v.promo&&v.promo.until||'')}"></label></div></div>
+        <label>Promoção vale até<input class="inp" id="pr-until" type="date" value="${esc(v.promo&&v.promo.until||'')}"></label>
+        <label>Custo por unidade (R$)<input class="inp tnum" id="pr-custo" type="number" min="0" step="0.01" value="${esc(v.custo||'')}" placeholder="Material e produção"></label>
+        <label class="full">Preço por quantidade<input class="inp" id="pr-tiers" value="${esc(tiersText(v.tiers))}" placeholder="Ex.: 10: 15,00 (a partir de 10 unidades, R$ 15,00 cada); separe degraus com ponto e vírgula"></label></div>
+        <p class="hint">O degrau vale para o total do produto no pedido, somando as opções; os acréscimos das opções somam depois. O custo não aparece no site: serve para a margem.</p></div>
       <div class="fieldset full" id="pr-quote" ${v.mode==='compra'?'hidden':''}><h4>Faixa de preço do orçamento</h4><div class="form">
         <label>A partir de (R$)<input class="inp tnum" id="pr-min" type="number" min="0" step="0.01" value="${esc(v.min||'')}"></label><label>Até (R$)<input class="inp tnum" id="pr-max" type="number" min="0" step="0.01" value="${esc(v.max||'')}"></label></div><p class="hint">${p&&catTwin(p)?`Este produto tem o mesmo nome de um item do <b>Catálogo & Serviços</b>. Enquanto for assim, vale a faixa de preço de lá (${esc(priceTxt(catTwin(p)))}) e, se o item for ocultado no Catálogo, o produto também sai do site.`:'Deixe os dois vazios para mostrar “Sob consulta”.'}</p></div>
       <div class="fieldset full"><h4>Fotos</h4><div class="pimgs" id="pr-imgs">${prodImgsHtml()}</div>
         ${ASSETS?`<label class="btn sm" style="align-self:flex-start;cursor:pointer"><i data-lucide="image-plus"></i>Enviar fotos<input type="file" id="pr-file" accept="image/png,image/jpeg,image/webp" multiple hidden></label>`:''}
         <p class="hint">Até 6 fotos em JPG, PNG ou WebP. A primeira é a principal. Formato ideal: deitada, 5 por 4 (ex.: 1500 × 1200). Fotos grandes são reduzidas automaticamente.</p></div>
-      <div class="fieldset full"><h4>Opções que o cliente escolhe (variações)</h4><p class="hint">Ex.: grupo “Tamanho”, opções “A5; A4 +15”. Separe as opções com ponto e vírgula; o “+15” soma R$ 15,00 ao preço.</p>
+      <div class="fieldset full"><h4>Opções que o cliente escolhe (variações)</h4><p class="hint">Ex.: grupo “Tamanho”, opções “A5; A4 +15”. Separe as opções com ponto e vírgula; o “+15” soma R$ 15,00 ao preço. Para o custo extra de uma opção, escreva “[custo 8]” depois dela (ex.: “Capa dura +17 [custo 8]”).</p>
         ${[0,1,2].map(i=>`<div class="form"><label>Grupo ${i+1}<input class="inp" id="pr-v${i}n" maxlength="40" value="${esc(vr(i).nome)}" placeholder="Ex.: ${['Tamanho','Miolo','Cor da capa'][i]}"></label><label>Opções<input class="inp" id="pr-v${i}o" value="${esc(opsText(vr(i).ops))}" placeholder="Ex.: ${['A5; A4 +15','Pautado; Pontilhado; Sem pauta','Rosa; Verde; Terracota'][i]}"></label></div>`).join('')}</div>
       <label class="full">Personalização: pergunta para o cliente<input class="inp" id="pr-pers" maxlength="60" value="${esc(v.pers||'')}" placeholder="Ex.: Nome para a capa (deixe vazio se o produto não é personalizado)"></label>
       <div class="fieldset full"><h4>Estoque e entrega</h4>
@@ -946,9 +1007,14 @@ async function saveProduct(id){
   if(!name){ el('name').focus(); toast('Informe o nome do produto',1); return; }
   if(mode==='compra'&&!(n('price')>0)){ el('price').focus(); toast('Informe o preço do produto',1); return; }
   if(mode==='compra'&&n('promo')>=n('price')&&n('promo')>0){ el('promo').focus(); toast('O preço promocional precisa ser menor que o preço',1); return; }
+  const tiers=mode==='compra'?tiersParse(v('tiers')):[]; const tb=tiers.find(t=>t.erro);
+  if(tb){ el('tiers').focus(); toast(`Não entendi o degrau “${tb.erro}”. Use o formato 10: 15,00`,1); return; }
+  const ref=n('promo')>0?n('promo'):n('price'); if(tiers.some(t=>t.min<2||!(t.price>0)||t.price>=ref)){ el('tiers').focus(); toast('Cada degrau precisa valer a partir de 2 unidades e ter preço menor que o preço do produto',1); return; }
+  tiers.sort((a,b)=>a.min-b.min);
   const vars=[]; for(const i of [0,1,2]){ const nome=v('v'+i+'n'), ops=opsParse(v('v'+i+'o')); if(!nome&&!ops.length) continue; if(!nome||!ops.length){ el('v'+i+(nome?'o':'n')).focus(); toast(nome?`Escreva as opções de “${nome}”`:'Dê um nome ao grupo de opções',1); return; } vars.push({nome,ops}); }
   const now=new Date().toISOString();
   const data={name,cat:v('cat'),desc:el('desc').value.trim(),mode,price:r2(n('price')),promo:mode==='compra'&&n('promo')>0?{price:r2(n('promo')),until:el('until').value||''}:null,min:r2(n('min')),max:r2(Math.max(n('max'),n('min'))),imgs:PE.imgs.slice(0,6),vars,pers:v('pers'),
+    tiers, custo:r2(n('custo')),
     stock:el('stockOn').checked?Math.max(0,Math.floor(n('stock'))):null,digital:el('digital').checked,peso:Math.max(1,Math.round(n('peso'))||300),c:Math.max(1,Math.round(n('c'))||25),l:Math.max(1,Math.round(n('l'))||18),a:Math.max(1,Math.round(n('a'))||3),
     on:el('on').checked,vitrine:el('vitrine').checked,ord:Math.max(0,Math.round(n('ord')))||D.products.length+1,updatedAt:now};
   const gone=PE.old.filter(u=>!PE.imgs.includes(u)&&/^asset:/.test(u));
@@ -989,10 +1055,39 @@ async function saveCoupon(id){
   const ok=id?await write(()=>DB.doc('coupons/'+id).update(data),'Cupom atualizado'):await (async()=>{ const ref=DB.collection('coupons').doc(); return write(()=>ref.set({...data,used:0,at:data.updatedAt}),'Cupom criado'); })();
   if(ok) closeModal();
 }
+function openDepo(id){
+  const d=id?D.depoimentos.find(x=>x.id===id):null; if(id&&!d) return; const v=d||{nome:'',cidade:'',texto:'',produto:'',origem:'whatsapp',status:'aprovado'}; delArm=null;
+  const site=d&&d.origem==='site';
+  $('#modalRoot').innerHTML=`<div class="overlay" data-close><div class="modal" role="dialog" aria-modal="true" aria-labelledby="dt" style="width:min(600px,100%)">
+    <div class="modal-head"><h3 id="dt">${d?'Depoimento':'Cadastrar depoimento'}</h3><button class="close" data-x aria-label="Fechar"><i data-lucide="x"></i></button></div>
+    <form id="dpForm" class="modal-body form" style="display:grid">
+      <label><span>Nome como deve aparecer <span class="req">*</span></span><input class="inp" id="dp-nome" maxlength="40" value="${esc(v.nome)}" placeholder="Ex.: Ana S."></label>
+      <label>Cidade<input class="inp" id="dp-cidade" maxlength="40" value="${esc(v.cidade||'')}"></label>
+      <label class="full"><span>Depoimento <span class="req">*</span></span><textarea class="inp" id="dp-texto" rows="5" maxlength="600" ${site?'readonly':''}>${esc(v.texto)}</textarea>${site?'<small class="hint">Escrito pelo cliente: o texto não pode ser alterado. Para não publicar, use “Ocultar”.</small>':'<small class="hint">Copie as palavras do cliente, sem mudar o sentido.</small>'}</label>
+      <label>Produto<input class="inp" id="dp-produto" maxlength="80" value="${esc(v.produto||'')}" list="dl-dprod"><datalist id="dl-dprod">${D.products.map(p=>`<option value="${esc(p.name)}">`).join('')}</datalist></label>
+      <label>Recebido por<select class="inp" id="dp-origem" ${site?'disabled':''}>${[['whatsapp','WhatsApp'],['instagram','Instagram'],['pessoalmente','Pessoalmente'],['email','E-mail'],...(site?[['site','Página do pedido']]:[])].map(([k,l])=>`<option value="${k}" ${v.origem===k?'selected':''}>${l}</option>`).join('')}</select></label>
+      ${site?`<p class="hint full">Autorização dada pelo cliente em ${dtime(v.autorizadoEm||v.at)}${v.pedido?`, no pedido #${esc(v.pedido)}`:''}.</p>`:`<label class="chk full"><input type="checkbox" id="dp-aut" ${d&&d.autorizado?'checked':''}>A pessoa autorizou a publicação deste depoimento, com este nome, no site e nas redes</label>`}
+    </form>
+    <div class="modal-foot">${d?`<button class="btn danger" data-dpdel="${esc(d.id)}" style="margin-right:auto"><i data-lucide="trash-2"></i>Excluir</button>`:''}<button class="btn" data-x>Cancelar</button><button class="btn primary" data-dpsave="${d?esc(d.id):''}"><i data-lucide="check"></i>${d?'Salvar':'Cadastrar e publicar'}</button></div></div></div>`;
+  icons(); $('#dp-nome').focus();
+}
+async function saveDepo(id){
+  const d=id?D.depoimentos.find(x=>x.id===id):null, g=k=>$('#dp-'+k).value.trim(), site=d&&d.origem==='site';
+  if(g('nome').length<2){ $('#dp-nome').focus(); toast('Escreva o nome como deve aparecer',1); return; }
+  if(!site&&g('texto').length<10){ $('#dp-texto').focus(); toast('Escreva o depoimento',1); return; }
+  if(!site&&!$('#dp-aut').checked){ $('#dp-aut').focus(); toast('Só publique com a autorização da pessoa. Marque a confirmação.',1); return; }
+  const now=new Date().toISOString(), base={nome:g('nome'),cidade:g('cidade'),produto:g('produto'),updatedAt:now};
+  if(!site) Object.assign(base,{texto:g('texto'),origem:g('origem'),autorizado:true,autorizadoEm:d&&d.autorizadoEm||now});
+  const ok=d?await write(()=>DB.doc('depoimentos/'+id).update(base),'Depoimento salvo'):await (async()=>{ const ref=DB.collection('depoimentos').doc(); return write(()=>ref.set({...base,status:'aprovado',verificado:false,at:now}),'Depoimento publicado'); })();
+  if(ok){ logAct(d?'Depoimento alterado':'Depoimento cadastrado',base.nome); closeModal(); }
+}
 async function saveLoja(){
   readLojaForm(); const f=LJ.form, dg=s=>digits(s);
   if(f.cepOrigem&&dg(f.cepOrigem).length!==8){ $('#lj-cepOrigem').focus(); toast('O CEP de origem precisa ter 8 números',1); return; }
   for(let i=0;i<f.faixas.length;i++){ const x=f.faixas[i]; if(!x.nome||dg(x.de).length!==8||dg(x.ate).length!==8||dg(x.ate)<dg(x.de)){ $('#lj-f'+i+(x.nome?'-de':'-nome')).focus(); toast('Confira a faixa '+(i+1)+': nome, CEP inicial e CEP final (8 números cada)',1); return; } }
+  if(f.taxaPct!==''&&!(f.taxaPct>=0&&f.taxaPct<=50)){ $('#lj-taxa').focus(); toast('A taxa vai de 0 a 50%',1); return; }
+  if(f.margemMinPct!==''&&!(f.margemMinPct>=0&&f.margemMinPct<=90)){ $('#lj-margem').focus(); toast('A margem mínima vai de 0 a 90%',1); return; }
+  if((+f.taxaPct||0)+(+f.margemMinPct||0)>=100){ $('#lj-margem').focus(); toast('Taxa + margem mínima precisam ficar abaixo de 100%',1); return; }
   if(f.retirada.on&&!f.retirada.texto){ $('#lj-retTexto').focus(); toast('Escreva o texto da retirada (região e como combinar)',1); return; }
   const full={...D.loja,...f,updatedAt:new Date().toISOString()};
   if(await write(()=>DB.doc('settings/loja').set(full),'Entrega e avisos salvos')){ D.loja=full; LJ.form=null; logAct('Configurações da loja alteradas','Entrega, frete grátis ou avisos por e-mail'); render(); }
@@ -1043,6 +1138,13 @@ async function lojaClick(el,d){
   if(d.ljfadd!==undefined){ readLojaForm(); LJ.form.faixas=[...(LJ.form.faixas||[]),{nome:'',de:'',ate:'',valor:0,prazo:''}].slice(0,40); render(); const i=LJ.form.faixas.length-1; $('#lj-f'+i+'-nome')?.focus(); return true; }
   if(d.ljfdel!==undefined){ readLojaForm(); LJ.form.faixas=LJ.form.faixas.filter((_,i)=>i!==+d.ljfdel); render(); return true; }
   if(d.ljsave!==undefined){ saveLoja(); return true; }
+  if(d.dpnew!==undefined){ openDepo(null); return true; }
+  if(d.dpedit){ openDepo(d.dpedit); return true; }
+  if(d.dpsave!==undefined){ saveDepo(d.dpsave||null); return true; }
+  if(d.dpok){ const x=D.depoimentos.find(y=>y.id===d.dpok); if(x){ if(x.autorizado!==true){ toast('Este depoimento não tem autorização registrada. Abra em Editar e confirme a autorização.',1); return true; } write(()=>DB.doc('depoimentos/'+x.id).update({status:'aprovado',aprovadoEm:new Date().toISOString()}),'Depoimento publicado no site'); logAct('Depoimento publicado',x.nome); } return true; }
+  if(d.dphide){ const x=D.depoimentos.find(y=>y.id===d.dphide); if(x){ write(()=>DB.doc('depoimentos/'+x.id).update({status:'oculto'}),'Depoimento retirado do site'); logAct('Depoimento ocultado',x.nome); } return true; }
+  if(d.dpdel){ if(delArm!==d.dpdel){ delArm=d.dpdel; el.innerHTML='<i data-lucide="alert-triangle"></i>Confirmar exclusão'; icons(); return true; }
+    const x=D.depoimentos.find(y=>y.id===d.dpdel); if(await write(()=>DB.doc('depoimentos/'+d.dpdel).delete(),'Depoimento excluído')){ logAct('Depoimento excluído',x?.nome||''); closeModal(); } return true; }
   if(d.pnew!==undefined){ openProduct(null); return true; }
   if(d.pedit){ openProduct(d.pedit); return true; }
   if(d.psave!==undefined){ saveProduct(d.psave||null); return true; }
@@ -2002,7 +2104,7 @@ function render(){
   if(S.view==='overview') drawOverview(); if(S.view==='reports') drawReports(); if(S.view==='cash') drawCash(); if(S.view==='monitor') drawMonitor(); if(S.view==='inbox') afterInbox();
   if(keep){ const el=document.getElementById(keep.id); if(el){ if('value' in el && keep.v!=null && el.tagName!=='SELECT') el.value=keep.v; el.focus(); try{ el.setSelectionRange(keep.s,keep.e); }catch(_){} } }
 }
-let rT; const soon=()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(S.view==='settings' && S.ready && ($('#s-pixKey')||$('#usersBox'))){ renderNav(); return; } if(S.view==='loja'&&S.lojaTab==='entrega') readLojaForm(); if($('#pForm')||$('#cpForm')){ renderNav(); return; } render(); },60); };
+let rT; const soon=()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(S.view==='settings' && S.ready && ($('#s-pixKey')||$('#usersBox'))){ renderNav(); return; } if(S.view==='loja'&&S.lojaTab==='entrega') readLojaForm(); if($('#pForm')||$('#cpForm')||$('#dpForm')){ renderNav(); return; } render(); },60); };
 
 /* ---------- Eventos ---------- */
 document.addEventListener('click',async e=>{
@@ -2184,7 +2286,7 @@ document.addEventListener('dragover',e=>{ const col=e.target.closest('[data-col]
 document.addEventListener('dragleave',e=>{ const dr=e.target.closest('#drop'); if(dr&&!dr.contains(e.relatedTarget)) dr.classList.remove('over'); });
 document.addEventListener('drop',e=>{ const col=e.target.closest('[data-col]'); const dr=e.target.closest('#drop'); const cc=e.target.closest('[data-ccol]');
   if(cc&&dragC){ e.preventDefault(); const id=dragC; dragC=null; document.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over')); setClientStage(id,cc.dataset.ccol); }
-  if(col&&dragId){ e.preventDefault(); const o=D.orders.find(x=>x.id===dragId); const to=col.dataset.col; dragId=null; document.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over')); if(o&&o.status!==to) write(()=>DB.doc('orders/'+o.id).update({status:to}),`Pedido #${o.num} → ${stLabel(to)}`); }
+  if(col&&dragId){ e.preventDefault(); const o=D.orders.find(x=>x.id===dragId); const to=col.dataset.col; dragId=null; document.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over')); if(o&&o.status!==to&&okProducao(o,to)) write(()=>DB.doc('orders/'+o.id).update({status:to}),`Pedido #${o.num} → ${stLabel(to)}`); }
   if(dr){ e.preventDefault(); dr.classList.remove('over'); if(!e.dataTransfer.files.length) return; if(!S.artOrder){ toast('Escolha o pedido antes de soltar os arquivos',1); return; } uploadTo(S.artOrder,[...e.dataTransfer.files]); } });
 document.addEventListener('dragend',()=>{ dragId=null; dragC=null; document.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over')); });
 
@@ -2216,5 +2318,6 @@ render();
   db.doc('settings/store').onSnapshot(s=>{ D.settings=s.exists?{...s.data()}:{}; mark('settings'); },onErr('settings'));
   db.collection('products').onSnapshot(s=>{ D.products=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
   db.collection('coupons').onSnapshot(s=>{ D.coupons=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
+  db.collection('depoimentos').onSnapshot(s=>{ D.depoimentos=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
   db.doc('settings/loja').onSnapshot(s=>{ D.loja=s.exists?{...s.data()}:{}; soon(); },()=>{});
 })();

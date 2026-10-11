@@ -43,6 +43,7 @@
       var li = el('li'), th = el('span', 'sum-thumb');
       if (it.img) { var im = document.createElement('img'); im.src = it.img.charAt(0) === '/' ? it.img : '/' + it.img; im.alt = ''; th.appendChild(im); } else th.textContent = '♥';
       var info = el('div'); info.appendChild(el('strong', null, it.qtd + ' × ' + it.nome)); var d = Cart.detail(it); if (d) info.appendChild(el('small', null, d));
+      if (it.base && it.preco < it.base + it.add) info.appendChild(el('small', 'tier-on', 'Preço por quantidade: ' + money(it.preco) + ' cada'));
       li.appendChild(th); li.appendChild(info); li.appendChild(el('strong', null, money(it.preco * it.qtd))); ul.appendChild(li);
     });
     subtotal = Math.round(order.reduce(function (a, i) { return a + i.preco * i.qtd; }, 0) * 100) / 100;
@@ -164,9 +165,10 @@
         var p = products.filter(function (x) { return x.id === i.id; })[0]; if (!p) return false;
         if (p.modo !== 'compra') { quoteOnly = true; return true; }
         var add = 0; p.variacoes.forEach(function (v) { var o = v.opcoes.filter(function (x) { return x.nome === i.vars[v.nome]; })[0]; if (o) add += o.acrescimo; });
-        i.preco = Math.round((p.preco + add) * 100) / 100; i.tipo = 'compra'; return true;
+        i.base = p.preco; i.add = add; i.faixas = p.faixasQtd || []; i.preco = Math.round((p.preco + add) * 100) / 100; i.tipo = 'compra'; i.digital = !!p.digital; return true;
       });
-      Cart.save(order);
+      Cart.reprice(order); Cart.save(order);
+      $('#prodNote').hidden = order.every(function (i) { return i.digital; });
       if (!order.length) return empty('Os produtos do seu pedido não estão mais disponíveis. Escolha outros na loja.');
       if (quoteOnly) { empty('Seu pedido tem itens feitos sob orçamento. Volte ao pedido para enviar tudo como pedido de orçamento.'); var a = $('#emptyBox .btn'); a.textContent = 'Voltar ao pedido'; a.href = '/#pedido'; return; }
       if (account) { $('#coWho').hidden = true; var s = $('#coSigned'); s.hidden = false; s.textContent = 'Pedido em nome de ' + account.nome + ' (' + account.email + '), com o WhatsApp ' + account.telefone + ' da sua conta.'; }
