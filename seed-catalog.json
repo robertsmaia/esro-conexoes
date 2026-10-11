@@ -1,0 +1,400 @@
+[
+ {
+  "id": "c01",
+  "data": {
+   "d": "Orientações personalizadas para coordenadoras, professoras e equipes escolares",
+   "items": [
+    {
+     "max": 15,
+     "min": 15,
+     "name": "Áudio explicativo de até 5 minutos",
+     "on": true
+    },
+    {
+     "max": 25,
+     "min": 25,
+     "name": "Áudio explicativo de até 10 minutos",
+     "on": true
+    },
+    {
+     "max": 50,
+     "min": 50,
+     "name": "Vídeo explicativo de até 10 minutos",
+     "on": true
+    },
+    {
+     "max": 110,
+     "min": 110,
+     "name": "Orientação online de 1 hora",
+     "on": true
+    }
+   ],
+   "kind": "digital",
+   "n": "01",
+   "t": "Assessoria pedagógica online"
+  }
+ },
+ {
+  "id": "c02",
+  "data": {
+   "d": "Conteúdos personalizados para formações, estudos e organização do trabalho pedagógico",
+   "items": [
+    {
+     "max": 45,
+     "min": 25,
+     "name": "Pauta de formação",
+     "on": true
+    },
+    {
+     "max": 90,
+     "min": 35,
+     "name": "Slides de formação",
+     "on": true
+    },
+    {
+     "max": 250,
+     "min": 120,
+     "name": "Plano de formação continuada",
+     "on": true
+    },
+    {
+     "max": 45,
+     "min": 20,
+     "name": "Mapa mental pedagógico",
+     "on": true
+    },
+    {
+     "max": 80,
+     "min": 30,
+     "name": "Material de estudo em PDF",
+     "on": true
+    }
+   ],
+   "kind": "digital",
+   "n": "02",
+   "t": "Materiais pedagógicos"
+  }
+ },
+ {
+  "id": "c03",
+  "data": {
+   "d": "Organização e registros para a rotina pedagógica na Educação Infantil",
+   "items": [
+    {
+     "max": 80,
+     "min": 40,
+     "name": "Planejamento semanal",
+     "on": true
+    },
+    {
+     "max": 200,
+     "min": 100,
+     "name": "Planejamento mensal",
+     "on": true
+    },
+    {
+     "max": 120,
+     "min": 60,
+     "name": "Avaliação de grupo",
+     "on": true
+    },
+    {
+     "max": 100,
+     "min": 50,
+     "name": "Avaliação de formação",
+     "on": true
+    }
+   ],
+   "kind": "digital",
+   "n": "03",
+   "t": "Planejamentos e avaliações"
+  }
+ },
+ {
+  "id": "c04",
+  "data": {
+   "d": "Guias práticos e modelos para apoiar o cotidiano pedagógico",
+   "items": [
+    {
+     "max": 50,
+     "min": 25,
+     "name": "Orientações sobre planejamento pedagógico",
+     "on": true
+    },
+    {
+     "max": 60,
+     "min": 30,
+     "name": "Guia de intencionalidade pedagógica",
+     "on": true
+    },
+    {
+     "max": 60,
+     "min": 30,
+     "name": "Guia para escrita do diário de bordo",
+     "on": true
+    },
+    {
+     "max": 40,
+     "min": 20,
+     "name": "Guia para elaboração de ata de formação",
+     "on": true
+    },
+    {
+     "max": 70,
+     "min": 30,
+     "name": "Documentação pedagógica",
+     "on": true
+    },
+    {
+     "max": 70,
+     "min": 35,
+     "name": "Guia para elaboração de relatórios infantis",
+     "on": true
+    },
+    {
+     "max": 60,
+     "min": 30,
+     "name": "Guia de organização da rotina pedagógica",
+     "on": true
+    },
+    {
+     "max": 50,
+     "min": 25,
+     "name": "Modelo de carta de intenções",
+     "on": true
+    },
+    {
+     "max": 40,
+     "min": 20,
+     "name": "Modelo de registro de reunião pedagógica",
+     "on": true
+    },
+    {
+     "max": 80,
+     "min": 35,
+     "name": "Guia de estudos com referências bibliográficas",
+     "on": true
+    }
+   ],
+   "kind": "digital",
+   "n": "04",
+   "t": "Documentos e orientações"
+  }
+ },
+ {
+  "id": "c05",
+  "data": {
+   "d": "Sínteses claras para estudar documentos e compartilhar informações com a equipe",
+   "items": [
+    {
+     "max": 40,
+     "min": 20,
+     "name": "Resumo de documento ou texto curto",
+     "on": true
+    },
+    {
+     "max": 100,
+     "min": 50,
+     "name": "Resumo de documento extenso",
+     "on": true
+    },
+    {
+     "max": 60,
+     "min": 30,
+     "name": "Síntese de informações para reunião",
+     "on": true
+    },
+    {
+     "max": 60,
+     "min": 30,
+     "name": "Resumo para compartilhar com professoras",
+     "on": true
+    },
+    {
+     "max": 70,
+     "min": 35,
+     "name": "Fichamento de texto pedagógico",
+     "on": true
+    },
+    {
+     "max": 80,
+     "min": 40,
+     "name": "Roteiro de estudo para formação",
+     "on": true
+    },
+    {
+     "max": 50,
+     "min": 25,
+     "name": "Perguntas para reflexão e discussão em grupo",
+     "on": true
+    }
+   ],
+   "kind": "digital",
+   "n": "05",
+   "t": "Resumos e materiais de estudo"
+  }
+ },
+ {
+  "id": "c06",
+  "data": {
+   "d": "Comunicação visual para escolas, professoras e eventos",
+   "items": [
+    {
+     "max": 35,
+     "min": 15,
+     "name": "Arte para bilhete",
+     "on": true
+    },
+    {
+     "max": 40,
+     "min": 15,
+     "name": "Arte para lembrancinha",
+     "on": true
+    },
+    {
+     "max": 45,
+     "min": 20,
+     "name": "Capa de caderno digital",
+     "on": true
+    },
+    {
+     "max": 50,
+     "min": 20,
+     "name": "Convites e cartazes",
+     "on": true
+    },
+    {
+     "max": 35,
+     "min": 15,
+     "name": "Etiquetas e identificações",
+     "on": true
+    }
+   ],
+   "kind": "digital",
+   "n": "06",
+   "t": "Artes digitais personalizadas"
+  }
+ },
+ {
+  "id": "c07",
+  "data": {
+   "d": "Produtos físicos em brochura, com capa personalizada e acabamento artesanal",
+   "items": [
+    {
+     "max": 85,
+     "min": 45,
+     "name": "Agenda personalizada",
+     "on": true
+    },
+    {
+     "max": 90,
+     "min": 45,
+     "name": "Planner personalizado",
+     "on": true
+    },
+    {
+     "max": 30,
+     "min": 15,
+     "name": "Bloquinho em brochura",
+     "on": true
+    },
+    {
+     "max": 55,
+     "min": 25,
+     "name": "Caderno em brochura",
+     "on": true
+    },
+    {
+     "max": 35,
+     "min": 15,
+     "name": "Capa de caderneta de vacinação",
+     "on": true
+    }
+   ],
+   "kind": "fisico",
+   "n": "07",
+   "t": "Papelaria personalizada"
+  }
+ },
+ {
+  "id": "c08",
+  "data": {
+   "d": "Ideias, materiais e acompanhamentos sob medida para as suas necessidades",
+   "items": [
+    {
+     "max": 0,
+     "min": 0,
+     "name": "Revisão de planejamentos e documentos",
+     "on": true
+    },
+    {
+     "max": 0,
+     "min": 0,
+     "name": "Organização de portfólio pedagógico",
+     "on": true
+    },
+    {
+     "max": 0,
+     "min": 0,
+     "name": "Fichas de observação",
+     "on": true
+    },
+    {
+     "max": 0,
+     "min": 0,
+     "name": "Roteiros para reuniões de responsáveis",
+     "on": true
+    },
+    {
+     "max": 0,
+     "min": 0,
+     "name": "Materiais para encontros literários",
+     "on": true
+    },
+    {
+     "max": 0,
+     "min": 0,
+     "name": "Pacotes mensais de assessoria",
+     "on": true
+    },
+    {
+     "max": 0,
+     "min": 0,
+     "name": "Serviços sob demanda",
+     "on": true
+    },
+    {
+     "desc": "Pauta + slides + apoio",
+     "max": 150,
+     "min": 150,
+     "name": "Combo 1 • Formação completa",
+     "on": true
+    },
+    {
+     "desc": "Resumo + mapa + áudio",
+     "max": 90,
+     "min": 90,
+     "name": "Combo 2 • Estudo pedagógico",
+     "on": true
+    },
+    {
+     "desc": "Plano + pauta + avaliação",
+     "max": 220,
+     "min": 220,
+     "name": "Combo 3 • Apoio à coordenadora",
+     "on": true
+    },
+    {
+     "desc": "1h + material em PDF",
+     "max": 140,
+     "min": 140,
+     "name": "Combo 4 • Orientação",
+     "on": true
+    }
+   ],
+   "kind": "misto",
+   "n": "08",
+   "t": "Outros serviços e combos"
+  }
+ }
+]

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23E7B5A2'/%3E%3Cpath d='M18 25c0-8 10-10 14-2 4-8 14-6 14 2 0 10-14 19-14 19S18 35 18 25Z' fill='none' stroke='%2340261C' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/conta.css">
+  <link rel="stylesheet" href="/loja.css">
+  <title>Finalizar compra | ESRO</title>
+</head>
+<body data-page="finalizar">
+  <div class="top"><a href="https://wa.me/5511992481676" target="_blank" rel="noopener noreferrer">Pedidos e orçamentos pelo WhatsApp: (11) 99248-1676</a></div>
+  <header class="header">
+    <nav class="wrap nav" aria-label="Navegação">
+      <a class="brand" href="/" aria-label="ESRO, página inicial">Esro<span aria-hidden="true">♥</span></a>
+      <div class="nav-links"><a class="back" href="/#pedido">Voltar ao pedido</a></div>
+    </nav>
+  </header>
+
+  <main class="shop">
+    <div class="wrap">
+      <h1 class="co-title">Finalizar compra</h1>
+      <p class="loading" id="loading" role="status">Conferindo o seu pedido…</p>
+      <noscript><p class="msg bad">Para comprar pelo site é preciso ativar o JavaScript do navegador. Você também pode pedir pelo WhatsApp.</p></noscript>
+
+      <div class="card empty-cart" id="emptyBox" hidden>
+        <h2>Seu pedido está vazio</h2>
+        <p id="emptyText">Escolha os produtos na loja e volte aqui para finalizar.</p>
+        <div class="actions"><a class="btn primary" href="/#kits">Ver os produtos</a></div>
+      </div>
+
+      <form class="co" id="coForm" novalidate hidden>
+        <div>
+          <section class="card" aria-labelledby="t1">
+            <h2 id="t1"><span>1</span>Seus dados</h2>
+            <p class="signed" id="coSigned" hidden></p>
+            <div id="coWho">
+              <label class="field"><span class="lab">Nome completo</span>
+                <span class="line"><input type="text" name="nome" id="co-nome" autocomplete="name" maxlength="80" aria-describedby="co-nome-err"></span>
+                <small class="err" id="co-nome-err" hidden></small></label>
+              <div class="row2">
+                <label class="field"><span class="lab">WhatsApp <small>com DDD</small></span>
+                  <span class="line"><input type="tel" name="telefone" id="co-telefone" autocomplete="tel-national" inputmode="tel" maxlength="20" placeholder="(11) 99999-0000" aria-describedby="co-telefone-err"></span>
+                  <small class="err" id="co-telefone-err" hidden></small></label>
+                <label class="field"><span class="lab">E-mail <small>opcional</small></span>
+                  <span class="line"><input type="email" name="email" id="co-email" autocomplete="email" maxlength="120" aria-describedby="co-email-err co-email-hint"></span>
+                  <small class="err" id="co-email-err" hidden></small><small class="hint" id="co-email-hint">Para receber a confirmação e o link do pedido.</small></label>
+              </div>
+              <p class="hint">Tem conta? <a href="/entrar">Entre</a> para não digitar os dados e acompanhar tudo em "Minha conta".</p>
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="t2">
+            <h2 id="t2"><span>2</span>Entrega</h2>
+            <p id="digitalNote" hidden>Seu pedido tem só produtos digitais: a entrega é feita por e-mail ou WhatsApp, sem frete.</p>
+            <div id="cepBox">
+              <div class="inline">
+                <label class="field"><span class="lab">CEP</span>
+                  <span class="line"><input type="text" name="cep" id="co-cep" autocomplete="postal-code" inputmode="numeric" maxlength="9" placeholder="00000-000" aria-describedby="co-cep-err"></span>
+                  <small class="err" id="co-cep-err" hidden></small></label>
+                <button class="btn secondary small" type="button" id="cepBtn" data-busy="Calculando…">Calcular frete</button>
+              </div>
+            </div>
+            <div class="choices" id="shipList" role="radiogroup" aria-label="Forma de entrega"></div>
+            <small class="err" id="co-entrega-err" hidden></small>
+            <div id="addrBox" hidden>
+              <div class="row3">
+                <label class="field"><span class="lab">Rua</span>
+                  <span class="line"><input type="text" name="rua" id="co-rua" autocomplete="address-line1" maxlength="120" aria-describedby="co-rua-err"></span>
+                  <small class="err" id="co-rua-err" hidden></small></label>
+                <label class="field"><span class="lab">Número</span>
+                  <span class="line"><input type="text" name="numero" id="co-numero" autocomplete="off" maxlength="20" aria-describedby="co-numero-err"></span>
+                  <small class="err" id="co-numero-err" hidden></small></label>
+              </div>
+              <div class="row2">
+                <label class="field"><span class="lab">Complemento <small>opcional</small></span>
+                  <span class="line"><input type="text" name="complemento" id="co-complemento" autocomplete="address-line2" maxlength="80"></span></label>
+                <label class="field"><span class="lab">Bairro</span>
+                  <span class="line"><input type="text" name="bairro" id="co-bairro" autocomplete="address-level3" maxlength="80" aria-describedby="co-bairro-err"></span>
+                  <small class="err" id="co-bairro-err" hidden></small></label>
+              </div>
+              <div class="row3">
+                <label class="field"><span class="lab">Cidade</span>
+                  <span class="line"><input type="text" name="cidade" id="co-cidade" autocomplete="address-level2" maxlength="80" aria-describedby="co-cidade-err"></span>
+                  <small class="err" id="co-cidade-err" hidden></small></label>
+                <label class="field"><span class="lab">Estado</span>
+                  <span class="line"><select name="uf" id="co-uf" autocomplete="address-level1" aria-describedby="co-uf-err"><option value="">UF</option></select></span>
+                  <small class="err" id="co-uf-err" hidden></small></label>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="t3">
+            <h2 id="t3"><span>3</span>Cupom e observações</h2>
+            <div class="inline">
+              <label class="field"><span class="lab">Cupom de desconto <small>opcional</small></span>
+                <span class="line"><input type="text" name="cupom" id="co-cupom" autocomplete="off" maxlength="30" aria-describedby="co-cupom-err"></span>
+                <small class="err" id="co-cupom-err" hidden></small></label>
+              <button class="btn secondary small" type="button" id="cupomBtn" data-busy="Conferindo…">Aplicar</button>
+            </div>
+            <p class="msg good" id="cupomOk" role="status" hidden></p>
+            <label class="field"><span class="lab">Observações <small>opcional</small></span>
+              <span class="line"><textarea name="obs" id="co-obs" rows="2" maxlength="500" placeholder="Cores, prazo, recado para a ESRO…"></textarea></span></label>
+          </section>
+
+          <section class="card" aria-labelledby="t4">
+            <h2 id="t4"><span>4</span>Pagamento</h2>
+            <div class="choices" id="payList" role="radiogroup" aria-label="Forma de pagamento"></div>
+          </section>
+        </div>
+
+        <aside class="card sum" aria-labelledby="sumT">
+          <h2 id="sumT">Resumo do pedido</h2>
+          <ul class="sum-items" id="sumItems"></ul>
+          <div class="totals" id="totals" aria-live="polite"></div>
+          <label class="check"><input type="checkbox" name="aceite" id="co-aceite" aria-describedby="co-aceite-err"><span>Li e aceito a <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a> e as condições de <a href="/entregas" target="_blank" rel="noopener">entregas e trocas</a>.</span></label>
+          <small class="err" id="co-aceite-err" hidden></small>
+          <input class="hp" type="text" name="site" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <p class="msg bad" id="coMsg" role="alert" hidden></p>
+          <div class="actions"><button class="btn primary block" type="submit" id="coBtn" data-busy="Registrando o pedido…">Fazer o pedido</button></div>
+          <p class="hint">Você confere tudo e paga na próxima tela. Dúvidas? <a href="https://wa.me/5511992481676" target="_blank" rel="noopener noreferrer">Fale com a ESRO</a>.</p>
+        </aside>
+      </form>
+    </div>
+  </main>
+
+  <footer class="foot-mini"><div class="wrap"><span>© 2026 ESRO. Papelaria com propósito.</span><span><a href="/entregas">Entregas e trocas</a> · <a href="/privacidade">Política de Privacidade</a></span></div></footer>
+  <script src="/carrinho.js"></script>
+  <script src="/finalizar.js"></script>
+</body>
+</html>
