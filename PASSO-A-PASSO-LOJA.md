@@ -1,4 +1,4 @@
-# ESRO — Loja online: passo a passo de cada recurso (versão 1.5)
+# ESRO — Loja online: passo a passo de cada recurso (versão 1.6)
 
 Este guia mostra como usar cada recurso novo do site e do painel. Está na ordem em que vale a pena fazer.
 
@@ -19,10 +19,11 @@ Este guia mostra como usar cada recurso novo do site e do painel. Está na ordem
 | 9. Outras redes sociais | Monitoramento → Outras redes | Não |
 | 13. Preços, custo e margem (1.5) | Loja online → Produtos / Entrega, avisos e margem | Não |
 | 14. Depoimentos de clientes (1.5) | Loja online → Depoimentos | Não |
+| 15. Escolha seu miolo (1.6) | Loja online → Miolos | Não |
 
 ---
 
-## 0. Antes de tudo: publicar a versão 1.5
+## 0. Antes de tudo: publicar a versão 1.6
 
 1. Abra o GitHub no repositório `esro-conexoes` → **Add file → Upload files**.
 2. Envie o arquivo **`esro-pacote.tgz`** que está na pasta `Site Esro` do computador e clique em **Commit changes**.
@@ -320,6 +321,36 @@ A página inicial ganhou a seção **Depoimentos**, que só aparece quando exist
 - **No painel:** **Loja online → Depoimentos** → **Publicar**, **Ocultar** ou **Editar**. O texto escrito pelo cliente não pode ser alterado; se não quiser publicar, oculte.
 - **Recebeu pelo WhatsApp ou Instagram?** **Cadastrar depoimento**, copie as palavras da pessoa e marque que ela autorizou a publicação. Sem essa confirmação o painel não salva.
 - O site mostra só nome, cidade, produto e mês. Telefone, e-mail e número do pedido nunca aparecem. Os depoimentos que vieram pelo site levam o selo "Compra verificada".
+
+## 15. Escolha seu miolo (versão 1.6)
+
+Página nova do site, **/miolos**: o cliente vê as categorias (“Como você quer organizar sua rotina?”), abre os modelos, folheia o miolo completo, escolhe cor, tamanho e ano e leva o miolo escolhido para o produto. **Ela começa vazia**: nada aparece até você cadastrar e publicar. Enquanto não houver modelo publicado, o link “Escolha seu miolo” não aparece no menu, e quem abrir o endereço vê um aviso com o WhatsApp.
+
+### 1. Criar as categorias
+**Loja online → Miolos → Nova categoria.** Nome (o campo sugere: Agenda com 1 dia por página, Agenda com 2 dias por página, Agendamentos profissionais, Agenda jurídica, Planners, Cadernos e anotações), descrição curta e, se quiser, uma imagem para o cartão. Uma categoria só aparece no site quando tiver pelo menos um modelo **publicado e disponível**; na lista do painel ela fica marcada como “Não aparece” até lá.
+
+### 2. Cadastrar cada modelo
+**Novo modelo** e preencha:
+- **Nome e código** (ex.: Floral, AG1D-01). O código é o que o cliente usa na busca e o que aparece no pedido.
+- **Cores**: nome, amostra (o seletor de cor) e as **prévias desta cor** (fotos reais do miolo nessa cor). Desmarque “Disponível” para mostrar a cor sem deixar escolher.
+- **Tamanhos, ano e formatos**, separados por ponto e vírgula. Medidas entre parênteses e `[indisponível]` para mostrar a opção bloqueada. Ex.: `A5 (14,8 × 21 cm); A4 (21 × 29,7 cm) [indisponível]`.
+- **Combinações indisponíveis**: uma por linha, com os mesmos nomes. Ex.: `Verde-sálvia + A4`. O site não deixa escolher essa combinação, e o servidor confere de novo no pedido.
+- **Seções incluídas**, uma por linha (calendário, planejamento, controle financeiro, dados pessoais, anotações…).
+- **Prévias**: até 12 imagens reais das páginas internas (ideal em pé, 3 por 4).
+- **Miolo completo**: uma imagem por página. Selecione várias de uma vez; elas entram pela ordem do nome do arquivo (01, 02, 03…). Dá para mudar a ordem com as setas e remover páginas. Cada página ocupa espaço no armazenamento (300 MB no total): prefira uma amostra representativa em vez do miolo inteiro.
+- **PDF de demonstração (público)**: opcional, até 8 MB. Qualquer pessoa pode abrir. Use um arquivo separado, só para mostrar.
+- **Arquivos de produção (privados)**: o arquivo de impressão fica só no painel. Nunca aparece no site, nem para quem comprou.
+- **Produtos que usam este miolo**: marque a agenda, o planner ou o caderno. No site, “Escolher este miolo” leva para esses produtos, e a página deles passa a mostrar o quadro “Miolo”. Sem produto marcado, o site oferece o pedido de orçamento pelo WhatsApp.
+- **Publicado no site**, **Destaque** (aparece primeiro) e **Indisponível no momento** (aparece com o aviso, mas não dá para escolher).
+
+As imagens são reduzidas no navegador antes de enviar (grande de até 1600 px e miniatura de até 420 px). Se você enviar imagens e cancelar sem salvar, elas são apagadas.
+
+### 3. Como fica para o cliente
+- **Busca** pelo nome ou código e **filtros** de categoria, ano, cor e tamanho, com “Limpar filtros”. Os filtros ficam no endereço da página: abrir um modelo e voltar mantém a busca.
+- No modelo: galeria com ampliação, cores com amostra e nome (a prévia muda com a cor), tamanhos, ano, formatos, seções e o aviso “As cores podem variar conforme a tela e a impressão”. Fica claro que é **produto físico personalizado**, não arquivo digital.
+- **Ver miolo completo** abre o visualizador: página atual e total, setas, teclado, deslizar no celular, miniaturas e zoom. As páginas carregam uma a uma. Sem prévia completa, o site avisa (e mostra o PDF de demonstração, se houver).
+- **Escolher este miolo** mostra o resumo (modelo, cor, tamanho, ano), os botões para seguir com os produtos ligados e uma mensagem pronta para o WhatsApp (o cliente revisa e envia; nada é enviado sozinho).
+- Na página do produto, o miolo escolhido aparece com “Trocar” e “Remover” e entra no carrinho. No pedido, aparece como **Modelo do miolo: AG1D-01 Floral · Rosa · A5 · 2027**. A escolha é opcional: sem ela, você combina o miolo com o cliente.
 
 ## 12. O que foi testado e o que ainda não
 

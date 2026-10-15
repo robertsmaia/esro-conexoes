@@ -1,6 +1,6 @@
 {
   "name": "esro-conexoes",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "description": "Servidor da ESRO Papelaria: site com loja (compra direta, frete, cupons e pagamento), painel administrativo com usuários e níveis, WhatsApp, Instagram Direct e e-mails automáticos.",
   "type": "module",

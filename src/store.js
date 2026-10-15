@@ -16,9 +16,9 @@ const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
 export const dayOf = (d = new Date()) => dayFmt.format(d);   // AAAA-MM-DD no horário de São Paulo
 const CONTROL = new RegExp('[\\u0000-\\u001f\\u007f\\u200b-\\u200f\\u2028-\\u202e]', 'g');
 const clean = (s, max) => str(s).normalize('NFC').replace(CONTROL, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
-const PAGES = new Set(['/', '/entrar', '/conta', '/privacidade', '/entregas', '/finalizar']);
+const PAGES = new Set(['/', '/entrar', '/conta', '/privacidade', '/entregas', '/finalizar', '/miolos']);
 const pageKey = (p) => PAGES.has(p) ? p : /^\/produto\/[a-z0-9-]{1,80}$/.test(String(p)) ? '/produto' : /^\/pedido\//.test(String(p)) ? '/pedido' : 'outra';
-const EVENTS = new Set(['carrinho', 'whatsapp', 'catalogo_pdf', 'finalizar']);
+const EVENTS = new Set(['carrinho', 'whatsapp', 'catalogo_pdf', 'finalizar', 'miolo']);
 // Outras redes: os números são anotados à mão no painel (essas redes não têm conexão automática aqui).
 const REDES = { facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', pinterest: 'Pinterest', whatsapp_canal: 'Canal do WhatsApp' };
 const BOT = /bot|crawl|spider|slurp|preview|monitor|uptime|curl|wget|python|headless|lighthouse|scan|http/i;
@@ -155,7 +155,7 @@ export function makeStore({ cfg, repo, log = console, clientIp, counter, account
     return {
       periodo: { de: since, ate: today, dias },
       site: { visitas: sum('visita'), paginas: sum('pagina'), porDia: days.map(d => ({ dia: d, visitas: v[d] || 0, paginas: pg[d] || 0 })), paginasVistas: top('pagina'), origens: top('origem'), aparelhos: top('aparelho'),
-        eventos: { carrinho: sum('evento', 'carrinho'), finalizar: sum('evento', 'finalizar'), compra: sum('evento', 'compra'), orcamento: sum('evento', 'orcamento'), whatsapp: sum('evento', 'whatsapp'), catalogo_pdf: sum('evento', 'catalogo_pdf'), novidades: sum('evento', 'novidades') },
+        eventos: { carrinho: sum('evento', 'carrinho'), finalizar: sum('evento', 'finalizar'), compra: sum('evento', 'compra'), orcamento: sum('evento', 'orcamento'), whatsapp: sum('evento', 'whatsapp'), catalogo_pdf: sum('evento', 'catalogo_pdf'), novidades: sum('evento', 'novidades'), miolo: sum('evento', 'miolo') },
         orcamentos: so, contas: { novas: users.novas, total: users.total } },
       atendimento: { porDia: days.map(d => ({ dia: d, ...(msg[d] || { whatsapp: { recebidas: 0, enviadas: 0 }, instagram: { recebidas: 0, enviadas: 0 } }) })),
         conversas: counts.conversas, naoLidas: counts.nao_lidas, respostaMedianaMin: resp.medianaMin, respostas: resp.n, whatsappLigado: !!cfg.whatsapp.token },

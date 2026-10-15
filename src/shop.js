@@ -62,7 +62,7 @@ function imgUrl(v) {
   return /^\/assets\/[\w\-/]+\.(svg|png|jpe?g|webp)$/.test(s) && !s.includes('..') ? { url: s, asset: null } : null;
 }
 
-export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts, mailer, fetchImpl = fetch }) {
+export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts, mailer, miolos = null, fetchImpl = fetch }) {
   const buys = counter(3600e3), tries = counter(3600e3), buysDay = counter(24 * 3600e3), quotes = counter(60e3), coupons = counter(3600e3), lookups = counter(60e3), hooks = counter(60e3);
   const MAX_BUYS_IP = cfg.store?.ordersPerHour || 8, MAX_BUYS_DAY = cfg.store?.ordersPerDay || 300;
   const ttl = () => cfg.store?.catalogTtlMs ?? 30e3;
@@ -114,7 +114,7 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
   }
 
   /* ---------- Itens do carrinho: confere tudo de novo no servidor (preço, variação, estoque) ---------- */
-  function checkItems(list, raw) {
+  function checkItems(list, raw, msnap = null) {
     const arr = Array.isArray(raw) ? raw.slice(0, 21) : [];
     if (!arr.length) return { erro: 'Escolha pelo menos um produto.', campo: 'itens' };
     if (arr.length > 20) return { erro: 'A compra pode ter no máximo 20 itens.', campo: 'itens' };
@@ -128,6 +128,8 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
       for (const v of p.vars) { const o = v.ops.find(x => x.n === str(chosen[v.nome])); if (!o) return { erro: `Escolha "${v.nome}" em "${p.name}".`, campo: 'itens' }; vars.push([v.nome, o.n]); add = r2(add + o.add); custo = r2(custo + o.custo); }
       const pers = p.pers ? clean(it?.pers, 120) : '';
       if (p.pers && !pers) return { erro: `Preencha "${p.pers}" em "${p.name}".`, campo: 'itens' };
+      // Miolo escolhido no catálogo de miolos: confere de novo aqui e entra no pedido como mais uma opção do item.
+      if (it?.miolo) { const mv = msnap && miolos ? miolos.validar(msnap, p.id, it.miolo) : { erro: 'Não foi possível conferir o miolo escolhido. Tente de novo.' }; if (mv?.erro) return { erro: mv.erro, campo: 'itens' }; if (mv) vars.push(['Modelo do miolo', mv.rotulo]); }
       qtyBy[p.id] = (qtyBy[p.id] || 0) + qtd;
       if (p.stock !== null && qtyBy[p.id] > p.stock) return { erro: p.stock > 0 ? `Só restam ${p.stock} unidade(s) de "${p.name}".` : `"${p.name}" está esgotado no momento.`, campo: 'itens', status: 409 };
       lines.push({ p, qtd, vars, pers, add, custo });
@@ -277,7 +279,7 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
     api.post('/frete', async (req, res) => {
       const b = body(req), ip = clientIp(req);
       if (quotes.add(ip) > 20) return res.status(429).set('Retry-After', String(quotes.retryAfter(ip))).json({ erro: 'Muitas consultas em pouco tempo. Aguarde um minuto.' });
-      const { list, loja } = await load(), chk = checkItems(list, b.itens); if (chk.erro) return bad(res, chk);
+      const { list, loja } = await load(), chk = checkItems(list, b.itens, await miolos?.load()); if (chk.erro) return bad(res, chk);
       const cep = digits(b.cep);
       if (!chk.digital && cep.length !== 8) return res.json({ digital: false, endereco: null, opcoes: await shipping('', chk, loja), subtotal: chk.subtotal });
       const end = chk.digital ? null : await address(cep);
@@ -288,7 +290,7 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
     api.post('/cupom', async (req, res) => {
       const b = body(req), ip = clientIp(req);
       if (coupons.add(ip) > 20) return res.status(429).set('Retry-After', String(coupons.retryAfter(ip))).json({ erro: 'Muitas tentativas de cupom. Aguarde um pouco.' });
-      const { list } = await load(), chk = checkItems(list, b.itens); if (chk.erro) return bad(res, chk);
+      const { list } = await load(), chk = checkItems(list, b.itens, await miolos?.load()); if (chk.erro) return bad(res, chk);
       const c = await coupon(b.codigo, chk.subtotal, Math.max(0, r2(b.frete)));
       if (!c) return bad(res, { campo: 'cupom', erro: 'Digite o código do cupom.' });
       if (c.erro) return bad(res, { campo: 'cupom', erro: c.erro });
@@ -310,7 +312,7 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
         nome = n.value; telefone = t.value;
         if (str(b.email).trim()) { const e = checkEmail(b.email); if (e.erro) return bad(res, e); email = e.value; }
       }
-      const { list, loja } = await load(true), chk = checkItems(list, b.itens); if (chk.erro) return bad(res, chk);
+      const { list, loja } = await load(true), chk = checkItems(list, b.itens, await miolos?.load(true)); if (chk.erro) return bad(res, chk);
       // Entrega: o servidor calcula as opções de novo; o valor nunca vem do navegador.
       const cep = digits(b.cep), entrega = str(b.entrega);
       if (!chk.digital && entrega !== 'retirada' && cep.length !== 8) return bad(res, { campo: 'cep', erro: 'Digite o CEP com 8 números.' });
@@ -452,7 +454,7 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
     });
 
     app.get('/sitemap.xml', async (req, res) => {
-      const base = baseUrl(req), urls = ['/', '/entregas', '/privacidade', ...(await load()).list.map(p => '/produto/' + p.slug)];
+      const base = baseUrl(req), urls = ['/', ...((await miolos?.load())?.categorias?.length ? ['/miolos'] : []), '/entregas', '/privacidade', ...(await load()).list.map(p => '/produto/' + p.slug)];
       res.set({ 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600', 'Content-Security-Policy': "default-src 'none'" });
       res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map(u => `<url><loc>${esc(base + u)}</loc></url>`).join('')}</urlset>`);
     });

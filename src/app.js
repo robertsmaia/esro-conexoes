@@ -13,6 +13,7 @@ import { makeStore } from './store.js';
 import { makeShop } from './shop.js';
 import { makeMailer } from './mail.js';
 import { makeDepoimentos, parseInstagramComments } from './depoimentos.js';
+import { makeMiolos } from './miolos.js';
 
 const safeEq = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y); };
 
@@ -74,7 +75,9 @@ export function createApp({ cfg, repo, fetchImpl = fetch, log = console }) {
   const accounts = makeAccounts({ cfg, repo, log, guard, clientIp, counter, mailer, depo });
   if (hasSite) accounts.mount(app, siteHeaders);
   // Compra direta: produtos, frete, cupons, pagamento, acompanhamento do pedido e lista de produtos para outros canais.
-  const direct = makeShop({ cfg, repo, log, clientIp, counter, accounts, mailer, fetchImpl });
+  const miolos = makeMiolos({ cfg, repo, log });   // catálogo de miolos: página "Escolha seu miolo" e conferência do miolo no carrinho
+  if (hasSite) miolos.mount(app, siteHeaders, SITE_DIR);
+  const direct = makeShop({ cfg, repo, log, clientIp, counter, accounts, mailer, miolos, fetchImpl });
   if (hasSite) direct.mount(app, siteHeaders);
   // Loja: catálogo público, pedido de orçamento, novidades e contagem de visitas (/api/...), mais os números do Monitoramento.
   const shop = makeStore({ cfg, repo, log, clientIp, counter, accounts, shop: direct, depo, mailer, fetchImpl });
@@ -216,7 +219,7 @@ export function makeTools({ cfg, repo, fetchImpl = fetch }) {
 }
 
 export function buildMcp(tools) {
-  const s = new McpServer({ name: 'esro-conexoes', version: '1.5.0' });
+  const s = new McpServer({ name: 'esro-conexoes', version: '1.6.0' });
   for (const [name, t] of Object.entries(tools)) {
     s.registerTool(name, { title: t.title, description: t.description, inputSchema: t.input, annotations: t.annotations }, async (args) => {
       try { return { content: [{ type: 'text', text: JSON.stringify(await t.run(args || {})) }] }; }

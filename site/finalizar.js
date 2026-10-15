@@ -18,7 +18,7 @@
   }
   try { fetch('/api/v', { method: 'POST', headers: { 'X-ESRO': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ p: '/finalizar' }), keepalive: true, credentials: 'omit' }).catch(function () { }); } catch (_) { }
 
-  var payload = function () { return order.map(function (i) { return { id: i.id, qtd: i.qtd, vars: i.vars, pers: i.pers }; }); };
+  var payload = function () { return order.map(function (i) { return i.miolo ? { id: i.id, qtd: i.qtd, vars: i.vars, pers: i.pers, miolo: { codigo: i.miolo.codigo, cor: i.miolo.cor, tamanho: i.miolo.tamanho, ano: i.miolo.ano } } : { id: i.id, qtd: i.qtd, vars: i.vars, pers: i.pers }; }); };
   var chosenShip = function () { return ship.filter(function (o) { return o.id === shipId; })[0] || null; };
   var needsAddress = function () { var s = chosenShip(); return !!s && s.id !== 'retirada' && s.id !== 'digital'; };
 

@@ -12,12 +12,12 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const PANEL_DIR = path.join(ROOT, 'painel');
 export const SITE_DIR = path.join(ROOT, 'site');
 
-const COLS = new Set(['orders', 'leads', 'clients', 'catalog', 'products', 'coupons', 'depoimentos', 'stock', 'cash', 'accounts', 'settings', 'audit']);
+const COLS = new Set(['orders', 'leads', 'clients', 'catalog', 'products', 'coupons', 'depoimentos', 'miolos', 'miolocats', 'stock', 'cash', 'accounts', 'settings', 'audit']);
 // Níveis de acesso do painel. O dono (senha principal, PAINEL_SENHA) é sempre administrador.
 export const ROLES = {
   admin: { nome: 'Administrador', descricao: 'Acesso a tudo, inclusive configurações, loja e usuários.', read: '*', write: '*', tools: true, files: true, monitor: true, contas: true, loja: true, users: true },
-  atendimento: { nome: 'Atendimento', descricao: 'Pedidos, clientes, conversas, depoimentos e arquivos. Não vê o caixa nem altera configurações.', read: ['orders', 'leads', 'clients', 'catalog', 'products', 'coupons', 'depoimentos', 'stock', 'settings'], write: ['orders', 'leads', 'clients', 'depoimentos', 'audit'], tools: true, files: true, monitor: true, contas: true },
-  producao: { nome: 'Produção', descricao: 'Pedidos, arquivos de arte e estoque. Não vê o caixa nem as conversas.', read: ['orders', 'clients', 'catalog', 'products', 'stock', 'settings'], write: ['orders', 'stock', 'audit'], files: true },
+  atendimento: { nome: 'Atendimento', descricao: 'Pedidos, clientes, conversas, depoimentos e arquivos. Não vê o caixa nem altera configurações.', read: ['orders', 'leads', 'clients', 'catalog', 'products', 'coupons', 'depoimentos', 'miolos', 'miolocats', 'stock', 'settings'], write: ['orders', 'leads', 'clients', 'depoimentos', 'audit'], tools: true, files: true, monitor: true, contas: true },
+  producao: { nome: 'Produção', descricao: 'Pedidos, arquivos de arte, miolos e estoque. Não vê o caixa nem as conversas.', read: ['orders', 'clients', 'catalog', 'products', 'miolos', 'miolocats', 'stock', 'settings'], write: ['orders', 'stock', 'audit'], files: true },
   financeiro: { nome: 'Financeiro', descricao: 'Pedidos, caixa, contas e relatórios. Não altera produtos nem configurações.', read: ['orders', 'clients', 'catalog', 'products', 'coupons', 'cash', 'accounts', 'settings'], write: ['orders', 'cash', 'accounts', 'audit'], monitor: true },
 };
 const LOGIN_RE = /^[a-z0-9][a-z0-9._-]{2,29}$/;

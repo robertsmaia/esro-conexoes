@@ -29,8 +29,8 @@ const shiftMonth = (d,n) => new Date(d.getFullYear(), d.getMonth()+n, 1);
 
 /* ---------- Estado ---------- */
 const S = { view:'overview', ch:'todos', q:'', orderMode:'kanban', lead:null, showChat:false, compose:'', pix:null, pixOpen:false, notifOpen:false,
-  quote:[], quoteClient:'', quotePhone:'', ready:false, dbOk:null, canWrite:true, artOrder:'', inboxTab:'live', stockTab:'todos', cTab:'todos', cMode:'list', cOrigin:'', cashTab:'lanc', cashM:'', cashAcc:'', lojaTab:'produtos' };
-const D = { orders:[], leads:[], catalog:[], settings:{}, stock:[], clients:[], cash:[], accounts:[], products:[], coupons:[], depoimentos:[], loja:{} };
+  quote:[], quoteClient:'', quotePhone:'', ready:false, dbOk:null, canWrite:true, artOrder:'', inboxTab:'live', stockTab:'todos', cTab:'todos', cMode:'list', cOrigin:'', cashTab:'lanc', cashM:'', cashAcc:'', lojaTab:'produtos', mioCat:'' };
+const D = { orders:[], leads:[], catalog:[], settings:{}, stock:[], clients:[], cash:[], accounts:[], products:[], coupons:[], depoimentos:[], miolos:[], miolocats:[], loja:{} };
 let DB=null, ASSETS=null, DL=null, ME=null;
 try{ const m=localStorage.getItem('esro-orderMode'); if(m) S.orderMode=m; const c=localStorage.getItem('esro-clientMode'); if(c) S.cMode=c; }catch(e){}
 
@@ -89,7 +89,7 @@ async function openAudit(){
 
 /* ---------- Backup completo (um arquivo com tudo) ---------- */
 const STANDALONE=!!window.ESRO_STANDALONE;   // true quando o painel roda no servidor próprio da ESRO, fora do claude.ai
-const BK_COLS=[['orders','Pedidos'],['clients','Clientes'],['leads','Atendimentos'],['stock','Estoque'],['cash','Fluxo de caixa e contas fixas'],['accounts','Contas bancárias'],['catalog','Catálogo'],['products','Produtos da loja'],['coupons','Cupons'],['depoimentos','Depoimentos']];
+const BK_COLS=[['orders','Pedidos'],['clients','Clientes'],['leads','Atendimentos'],['stock','Estoque'],['cash','Fluxo de caixa e contas fixas'],['accounts','Contas bancárias'],['catalog','Catálogo'],['products','Produtos da loja'],['coupons','Cupons'],['depoimentos','Depoimentos'],['miolocats','Categorias de miolo'],['miolos','Modelos de miolo']];
 const BK_ID=/^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 async function backupExport(){
   if(!S.ready){ toast('Aguarde os dados carregarem',1); return; }
@@ -338,7 +338,7 @@ function orderLojaBox(o){ const l=o.loja, e=l.endereco;
     <small class="hint" style="white-space:normal">Subtotal ${esc(fmt(l.subtotal))}${l.desconto>0?` · cupom ${esc(l.cupom)} − ${esc(fmt(l.desconto))}`:''} · ${esc(l.frete&&l.frete.nome||'Entrega')}: ${l.frete&&l.frete.combinar?'a combinar':l.frete&&l.frete.valor>0?esc(fmt(l.frete.valor)):'grátis'}${l.frete&&l.frete.prazo?' ('+esc(l.frete.prazo)+')':''} · <b style="color:var(--text)">Total ${esc(fmt(l.total))}</b></small>
     ${e?`<small class="hint" style="white-space:normal"><b style="color:var(--text)">Entregar em:</b> ${esc(e.rua)}, ${esc(e.numero)}${e.complemento?' · '+esc(e.complemento):''} · ${esc(e.bairro)} · ${esc(e.cidade)}/${esc(e.uf)} · CEP ${esc(e.cep)}</small>`:''}
     ${l.email?`<small class="hint">E-mail do cliente: ${esc(l.email)}</small>`:''}</div>`; }
-function closeModal(){ $('#modalRoot').innerHTML=''; delArm=null; }
+function closeModal(){ if(MIOC||MIOM) mioDiscard(); $('#modalRoot').innerHTML=''; delArm=null; }
 async function saveOrder(id){
   const g=k=>$('#f-'+k).value.trim(); const client=g('client'), item=g('item'), value=parseFloat($('#f-value').value);
   if(!client){ $('#f-client').focus(); toast('Informe o nome do cliente',1); return; }
@@ -735,7 +735,7 @@ async function loadMonitor(force){
 }
 const nfmt=n=>n==null?'—':Number(n).toLocaleString('pt-BR');
 const dlabel=d=>d.slice(8,10)+'/'+d.slice(5,7);
-const PAGE_NAMES={'/':'Página inicial','/entrar':'Entrar ou criar conta','/conta':'Minha conta','/privacidade':'Política de Privacidade','/entregas':'Entregas e trocas','/produto':'Páginas de produto','/finalizar':'Finalizar compra','/pedido':'Acompanhar pedido',outra:'Outras páginas'};
+const PAGE_NAMES={'/':'Página inicial','/entrar':'Entrar ou criar conta','/conta':'Minha conta','/privacidade':'Política de Privacidade','/entregas':'Entregas e trocas','/produto':'Páginas de produto','/finalizar':'Finalizar compra','/pedido':'Acompanhar pedido','/miolos':'Escolha seu miolo',outra:'Outras páginas'};
 function barList(rows,empty,name){ if(!rows.length||!rows.some(r=>r.n)) return `<p class="hint">${empty}</p>`; const mx=Math.max(...rows.map(r=>r.n),1);
   return `<div class="list" style="margin-top:6px">${rows.map(r=>`<div class="row mrow"><div class="grow"><b>${esc(name?name(r.chave):r.chave)}</b>${r.sub?`<small>${esc(r.sub)}</small>`:''}</div><div class="mbar" aria-hidden="true"><div style="width:${r.n?Math.max(3,r.n/mx*100):0}%"></div></div><b class="tnum mnum">${nfmt(r.n)}</b></div>`).join('')}</div>`; }
 function vMonitor(){
@@ -760,7 +760,7 @@ function vMonitor(){
   const outras=`<section class="card"><h3>Outras redes</h3><p class="hint">Facebook, TikTok, YouTube, Pinterest e Canal do WhatsApp não têm ligação automática com o painel. Anote o número de seguidores de vez em quando (por exemplo, toda segunda) para acompanhar a evolução.</p>
       <div class="mstats">${redes.map(r=>`<div><small>${esc(r.nome)}</small><b class="tnum">${nfmt(r.seguidores)}</b><small>${r.anotadoEm?'anotado em '+dlabel(r.anotadoEm):'ainda sem anotação'}${r.porDia.length>1?` · ${r.porDia[r.porDia.length-1].seguidores-r.porDia[0].seguidores>=0?'+':'− '}${nfmt(Math.abs(r.porDia[r.porDia.length-1].seguidores-r.porDia[0].seguidores))} no período`:''}</small></div>`).join('')}</div>
       <div class="compose-actions" style="align-items:flex-end"><label class="fl">Rede<select class="inp" id="rd-rede">${redes.map(r=>`<option value="${esc(r.id)}">${esc(r.nome)}</option>`).join('')}</select></label><label class="fl">Seguidores hoje<input class="inp tnum" id="rd-n" type="number" min="0" step="1" style="width:150px"></label><button class="btn" data-redesave><i data-lucide="check"></i>Anotar</button></div></section>`;
-  const acoes=[{chave:'Cliques para o WhatsApp',n:s.eventos.whatsapp},{chave:'Catálogo em PDF aberto',n:s.eventos.catalogo_pdf},{chave:'Contas criadas',n:s.contas.novas,sub:`${s.contas.total} conta(s) no total`},{chave:'Pedidos de novidades por e-mail',n:s.eventos.novidades}];
+  const acoes=[{chave:'Cliques para o WhatsApp',n:s.eventos.whatsapp},{chave:'Catálogo em PDF aberto',n:s.eventos.catalogo_pdf},{chave:'Miolos escolhidos no catálogo de miolos',n:s.eventos.miolo},{chave:'Contas criadas',n:s.contas.novas,sub:`${s.contas.total} conta(s) no total`},{chave:'Pedidos de novidades por e-mail',n:s.eventos.novidades}];
   const site=`<section class="card"><h3>Visitas por dia</h3><p class="hint">Cada visita conta uma vez, mesmo que a pessoa abra várias páginas. A contagem não usa cookies nem identifica quem visitou.</p>
       ${s.visitas?`<div class="chart-box" style="height:260px"><canvas id="mVis" role="img" aria-label="Visitas por dia: ${nfmt(s.visitas)} visitas em ${m.periodo.dias} dias"></canvas></div>`:emptyState('mouse-pointer-click','Ainda sem visitas registradas','A contagem começou quando esta versão do site foi publicada. Volte aqui em alguns dias.')}</section>
     <section class="grid two">
@@ -877,9 +877,10 @@ const copyLine=(label,value)=>`<label class="fl">${label}<span class="copyline">
 
 function vLoja(){
   const pend=D.depoimentos.filter(x=>x.status==='pendente').length;
-  const tabs=[['produtos','Produtos'],['cupons','Cupons'],['depoimentos','Depoimentos'+(pend?` (${pend})`:'')],['entrega','Entrega, avisos e margem'],['integr','Integrações']]; const w=writes('products');
+  const tabs=[['produtos','Produtos'],['cupons','Cupons'],['depoimentos','Depoimentos'+(pend?` (${pend})`:'')],['miolos','Miolos'],['entrega','Entrega, avisos e margem'],['integr','Integrações']]; const w=writes('products');
   const head=`<div class="page-head"><div><h2>Loja online</h2><p>Produtos com foto e compra direta, cupons, frete e as integrações do site.</p></div>
     <div class="toolbar"><div class="seg">${tabs.map(([k,l])=>`<button class="${S.lojaTab===k?'on':''}" data-ljtab="${k}">${l}</button>`).join('')}</div></div></div>`;
+  if(S.lojaTab==='miolos') return head+vMiolos();
   if(S.lojaTab==='cupons'){ const list=[...D.coupons].sort((a,b)=>String(a.code).localeCompare(String(b.code)));
     const desc=c=>c.kind==='frete'?'Frete grátis':c.kind==='valor'?`${fmt(c.value)} de desconto`:`${+c.value||0}% de desconto`;
     const val=c=>[c.from?'de '+dfull(c.from):'',c.to?'até '+dfull(c.to):'',+c.min>0?'compra mínima '+fmt(c.min):''].filter(Boolean).join(' · ')||'sem prazo nem valor mínimo';
@@ -1153,6 +1154,7 @@ function myAccessCard(){ const me=EU(); if(!me) return '';
       <button class="btn primary" style="margin-top:10px" data-mpsave><i data-lucide="check"></i>Trocar minha senha</button>`}</section>`; }
 
 async function lojaClick(el,d){
+  if(await mioClick(el,d)) return true;
   if(d.copy!==undefined&&d.copy!==''){ copy(d.copy); return true; }
   if(d.ljtab){ readLojaForm(); S.lojaTab=d.ljtab; render(); return true; }
   if(d.ljrefresh!==undefined){ LJ.status=null; LJ.err=''; render(); return true; }
@@ -2130,7 +2132,7 @@ function render(){
   if(S.view==='overview') drawOverview(); if(S.view==='reports') drawReports(); if(S.view==='cash') drawCash(); if(S.view==='monitor') drawMonitor(); if(S.view==='inbox') afterInbox();
   if(keep){ const el=document.getElementById(keep.id); if(el){ if('value' in el && keep.v!=null && el.tagName!=='SELECT') el.value=keep.v; el.focus(); try{ el.setSelectionRange(keep.s,keep.e); }catch(_){} } }
 }
-let rT; const soon=()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(S.view==='settings' && S.ready && ($('#s-pixKey')||$('#usersBox'))){ renderNav(); return; } if(S.view==='loja'&&S.lojaTab==='entrega') readLojaForm(); if($('#pForm')||$('#cpForm')||$('#dpForm')){ renderNav(); return; } render(); },60); };
+let rT; const soon=()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(S.view==='settings' && S.ready && ($('#s-pixKey')||$('#usersBox'))){ renderNav(); return; } if(S.view==='loja'&&S.lojaTab==='entrega') readLojaForm(); if($('#pForm')||$('#cpForm')||$('#dpForm')||$('#mcForm')||$('#mmForm')){ renderNav(); return; } render(); },60); };
 
 /* ---------- Eventos ---------- */
 document.addEventListener('click',async e=>{
@@ -2276,6 +2278,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
   const t=e.target;
+  if(/^(mio-fcat|mc-file|mm-file-)/.test(t.id||'')||(t.dataset&&t.dataset.mmcorfile!==undefined)){ mioChange(t); return; }
   if(t.id==='pr-file'){ const fs=[...t.files]; t.value=''; productPhotos(fs); return; }
   if(t.id==='pr-mode'){ $('#pr-buy').hidden=t.value!=='compra'; $('#pr-quote').hidden=t.value==='compra'; return; }
   if(t.dataset.ulevel){ const u=(US.list||[]).find(x=>x.id===t.dataset.ulevel); if(u) userAction(()=>window.ESRO_API('PATCH','/usuarios/'+u.id,{nivel:t.value}),`Nível de ${u.nome} alterado`); return; }
@@ -2345,5 +2348,232 @@ render();
   db.collection('products').onSnapshot(s=>{ D.products=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
   db.collection('coupons').onSnapshot(s=>{ D.coupons=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
   db.collection('depoimentos').onSnapshot(s=>{ D.depoimentos=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
+  db.collection('miolos').onSnapshot(s=>{ D.miolos=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
+  db.collection('miolocats').onSnapshot(s=>{ D.miolocats=s.docs.map(d=>({id:d.id,...d.data()})); soon(); },()=>{});
   db.doc('settings/loja').onSnapshot(s=>{ D.loja=s.exists?{...s.data()}:{}; soon(); },()=>{});
 })();
+
+/* ---------- Loja online → Miolos: categorias e modelos do catálogo "Escolha seu miolo" ----------
+   Imagens: cada prévia é enviada em dois tamanhos (grande e miniatura), já reduzidas no navegador.
+   O PDF de demonstração e as prévias aparecem no site; os arquivos de produção ficam só no painel. */
+var MIO_SUGEST=['Agenda com 1 dia por página','Agenda com 2 dias por página','Agendamentos profissionais','Agenda jurídica','Planners','Cadernos e anotações'];
+var MIO_CODE=/^[A-Z0-9][A-Z0-9-]{1,19}$/;
+var MIOC=null, MIOM=null;   // categoria e modelo sendo editados
+var mioThumb=p=>p&&p.t?'/_blob/'+p.t:'';
+var mioFirst=m=>(m.galeria||[])[0]||((m.cores||[]).find(c=>(c.imgs||[]).length)||{imgs:[]}).imgs[0]||(m.paginas||[])[0]||null;
+// Lista "A5 (14,8 × 21 cm); A4 [indisponível]" ⇄ [{nome, medida, disp}]
+var mioListText=(list,f)=>(list||[]).map(x=>`${x[f]}${x.medida?` (${x.medida})`:''}${x.disp===false?' [indisponível]':''}`).join('; ');
+function mioListParse(s,f){ return String(s||'').split(';').map(x=>x.trim()).filter(Boolean).slice(0,12).map(x=>{ const off=/\[\s*indispon[ií]vel\s*\]/i.test(x); x=x.replace(/\[[^\]]*\]/g,'').trim(); const m=/^(.*?)\s*\(([^)]*)\)\s*$/.exec(x);
+  const o={[f]:(m?m[1]:x).trim().slice(0,f==='ano'?10:30)}; if(m&&f!=='ano') o.medida=m[2].trim().slice(0,40); if(off) o.disp=false; return o; }).filter(o=>o[f]); }
+async function mioResize(file,max,q){
+  const bmp=await createImageBitmap(file), k=Math.min(1,max/Math.max(bmp.width,bmp.height)), c=document.createElement('canvas'); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k);
+  const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(bmp,0,0,c.width,c.height);
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',q)); if(!blob) throw new Error('imagem'); return new File([blob],file.name.replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'});
+}
+// Envia uma imagem em dois tamanhos: grande (até 1600 px) e miniatura (até 420 px).
+async function mioUpload(file,st){
+  if(!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error('Use imagens em JPG, PNG ou WebP');
+  const big=await mioResize(file,1600,.84), small=await mioResize(file,420,.8);
+  const f=await ASSETS.upload(big,{type:'image/jpeg'}); st.fresh.push(f.id);
+  const t=await ASSETS.upload(small,{type:'image/jpeg'}); st.fresh.push(t.id);
+  return {f:f.id,t:t.id};
+}
+var natSort=(a,b)=>a.name.localeCompare(b.name,'pt-BR',{numeric:true});
+async function mioUploadMany(files,st,max,into,label){
+  if(!ASSETS){ toast('Envio de arquivos indisponível nesta visualização',1); return 0; }
+  const list=[...files].sort(natSort); let n=0;
+  for(const f of list){ if(into.length>=max){ toast(`Limite de ${max} imagens aqui`,1); break; }
+    try{ toast(`Enviando ${label} ${n+1} de ${list.length}…`); into.push(await mioUpload(f,st)); n++; }catch(e){ toast(`${f.name}: ${e.message&&!/^\w+$/.test(e.message)?e.message:errMsg(e)}`,1); } }
+  return n;
+}
+var mioIds=p=>p?[p.f,p.t].filter(Boolean):[];
+async function mioDeleteAssets(ids){ if(!ASSETS) return; for(const id of new Set(ids)){ try{ await ASSETS.delete(id); }catch(_){} } }
+function mioDiscard(){ for(const st of [MIOC,MIOM]) if(st&&!st.saved&&st.fresh.length) mioDeleteAssets(st.fresh); MIOC=MIOM=null; }   // enviou e cancelou: apaga o que não foi salvo
+
+/* --- tela --- */
+function vMiolos(){
+  const wc=writes('miolocats'), wm=writes('miolos'), cats=[...D.miolocats].sort((a,b)=>(+a.ord||0)-(+b.ord||0)||String(a.nome).localeCompare(String(b.nome)));
+  const catName=id=>(D.miolocats.find(c=>c.id===id)||{}).nome||'—';
+  const avail=c=>D.miolos.filter(m=>m.cat===c.id&&m.on===true&&m.indisp!==true).length;
+  const mods=[...D.miolos].filter(m=>!S.mioCat||m.cat===S.mioCat).sort((a,b)=>String(catName(a.cat)).localeCompare(String(catName(b.cat)))||(+a.ord||0)-(+b.ord||0)||String(a.codigo).localeCompare(String(b.codigo)));
+  const thumb=p=>`<span class="pthumb">${mioThumb(p)?`<img src="${esc(mioThumb(p))}" alt="">`:'<i data-lucide="book-open"></i>'}</span>`;
+  return `<section class="card"><div class="card-top"><div><h3>Escolha seu miolo</h3><p class="hint">Catálogo de miolos do site (<a class="linkish" href="/miolos" target="_blank" rel="noopener">/miolos</a>). Só aparecem as categorias ativas com pelo menos um modelo publicado e disponível, e o link “Escolha seu miolo” entra no menu do site sozinho quando houver. Nada é inventado: categorias, modelos, cores e imagens vêm só daqui.</p></div></div></section>
+  <section class="card" style="margin-top:16px"><div class="card-top"><div><h3>Categorias</h3><p class="hint">Ex.: ${MIO_SUGEST.slice(0,4).join(', ')}…</p></div>${wc?'<button class="btn primary" data-mcnew><i data-lucide="plus"></i>Nova categoria</button>':''}</div>
+    ${cats.length?`<div class="list">${cats.map(c=>{ const n=avail(c), tot=D.miolos.filter(m=>m.cat===c.id).length; return `<div class="row prow">${thumb(c.img)}<div class="grow"><b>${esc(c.nome)}</b><small>${tot} modelo(s) · ${n} publicado(s) e disponível(is)</small></div>
+      ${c.on===false?'<span class="badge b-neutral">Oculta</span>':n?'<span class="badge b-ok">No site</span>':'<span class="badge b-warn" title="Sem modelo publicado e disponível">Não aparece</span>'}
+      ${wc?`<button class="btn sm" data-mcedit="${esc(c.id)}"><i data-lucide="pencil"></i>Editar</button>`:''}</div>`; }).join('')}</div>`
+      :emptyState('folder-plus','Nenhuma categoria ainda','Crie as categorias (por exemplo, “Agenda com 1 dia por página”) e depois cadastre os modelos de cada uma.')}</section>
+  <section class="card" style="margin-top:16px"><div class="card-top"><div><h3>Modelos de miolo</h3><p class="hint">Cada modelo tem código, cores, tamanhos, ano, prévias e o miolo completo para folhear no site.</p></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="inp" id="mio-fcat" aria-label="Filtrar por categoria" style="min-width:190px"><option value="">Todas as categorias</option>${cats.map(c=>`<option value="${esc(c.id)}" ${S.mioCat===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}</select>
+    ${wm&&cats.length?'<button class="btn primary" data-mmnew><i data-lucide="plus"></i>Novo modelo</button>':''}</div></div>
+    ${mods.length?`<div class="list">${mods.map(m=>`<div class="row prow">${thumb(mioFirst(m))}<div class="grow"><b><span class="tnum">${esc(m.codigo)}</span> · ${esc(m.nome)}</b>
+      <small>${esc(catName(m.cat))} · ${(m.paginas||[]).length?`${m.paginas.length} página(s) no miolo completo`:'sem prévia completa'}${m.demo?' · PDF de demonstração':''}${(m.producao||[]).length?` · ${m.producao.length} arquivo(s) de produção`:''}${(m.produtos||[]).length?'':' · sem produto ligado'}</small></div>
+      ${m.destaque?'<span class="badge b-info">Destaque</span>':''}${m.indisp?'<span class="badge b-warn">Indisponível</span>':''}${m.on===true?'<span class="badge b-ok">Publicado</span>':'<span class="badge b-neutral">Rascunho</span>'}
+      ${m.on===true&&D.miolocats.find(c=>c.id===m.cat&&c.on!==false)?`<a class="btn sm" href="/miolos?m=${encodeURIComponent(m.codigo)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>Ver</a>`:''}
+      ${wm?`<button class="btn sm" data-mmedit="${esc(m.id)}"><i data-lucide="pencil"></i>Editar</button>`:''}</div>`).join('')}</div>`
+      :emptyState('book-open','Nenhum modelo'+(S.mioCat?' nesta categoria':' ainda'),cats.length?'Cadastre o primeiro modelo com as imagens reais do miolo.':'Crie uma categoria primeiro.')}</section>`;
+}
+
+/* --- categoria --- */
+function openMioCat(id){
+  const c=id?D.miolocats.find(x=>x.id===id):null; if(id&&!c) return; const v=c||{nome:'',desc:'',ord:D.miolocats.length+1,on:true}; delArm=null;
+  MIOC={id:id||'',img:v.img||null,old:mioIds(v.img),fresh:[],saved:false};
+  $('#modalRoot').innerHTML=`<div class="overlay" data-close><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mct" style="width:min(620px,100%)">
+    <div class="modal-head"><h3 id="mct">${c?esc(c.nome):'Nova categoria de miolo'}</h3><button class="close" data-x aria-label="Fechar"><i data-lucide="x"></i></button></div>
+    <form id="mcForm" class="modal-body form" style="display:grid">
+      <label class="full"><span>Nome <span class="req">*</span></span><input class="inp" id="mc-nome" maxlength="60" value="${esc(v.nome)}" list="dl-mcat" placeholder="Ex.: Agenda com 1 dia por página"><datalist id="dl-mcat">${MIO_SUGEST.map(s=>`<option value="${esc(s)}">`).join('')}</datalist></label>
+      <label class="full">Descrição curta<textarea class="inp" id="mc-desc" rows="2" maxlength="300">${esc(v.desc||'')}</textarea></label>
+      <div class="fieldset full"><h4>Imagem do cartão</h4><div class="pimgs" id="mc-img">${mioPicsHtml(MIOC.img?[MIOC.img]:[],'mcimg')}</div>
+        ${ASSETS?`<label class="btn sm" style="align-self:flex-start;cursor:pointer"><i data-lucide="image-plus"></i>Enviar imagem<input type="file" id="mc-file" accept="image/png,image/jpeg,image/webp" hidden></label>`:''}
+        <p class="hint">Opcional. Sem imagem, o site usa a primeira prévia do primeiro modelo. Formato ideal: deitada, 4 por 3.</p></div>
+      <label>Ordem<input class="inp tnum" id="mc-ord" type="number" min="0" step="1" value="${esc(v.ord??'')}"></label>
+      <label class="chk" style="align-self:end;padding-bottom:10px"><input type="checkbox" id="mc-on" ${v.on!==false?'checked':''}>Ativa no site</label>
+    </form>
+    <div class="modal-foot">${c?`<button class="btn danger" data-mcdel="${esc(c.id)}" style="margin-right:auto"><i data-lucide="trash-2"></i>Excluir</button>`:''}<button class="btn" data-x>Cancelar</button><button class="btn primary" data-mcsave="${c?esc(c.id):''}"><i data-lucide="check"></i>${c?'Salvar':'Criar categoria'}</button></div></div></div>`;
+  icons(); $('#mc-nome').focus();
+}
+function mioPicsHtml(list,kind,numbered){ return list.map((p,i)=>`<span class="pimg mio-pic">${mioThumb(p)?`<img src="${esc(mioThumb(p))}" alt="${numbered?'Página '+(i+1):'Imagem '+(i+1)}">`:''}${numbered?`<em>${i+1}</em>`:''}
+  ${list.length>1&&kind!=='mcimg'?`<span class="mio-mv"><button type="button" data-miomv="${kind}:${i}:-1" aria-label="Mover para a esquerda" ${i===0?'disabled':''}>‹</button><button type="button" data-miomv="${kind}:${i}:1" aria-label="Mover para a direita" ${i===list.length-1?'disabled':''}>›</button></span>`:''}
+  <button type="button" data-miodel="${kind}:${i}" aria-label="Remover imagem ${i+1}"><i data-lucide="x"></i></button></span>`).join('')||'<small class="hint">Nenhuma imagem ainda.</small>'; }
+async function saveMioCat(id){
+  const nome=$('#mc-nome').value.trim().replace(/\s+/g,' ');
+  if(nome.length<2){ $('#mc-nome').focus(); toast('Informe o nome da categoria',1); return; }
+  if(D.miolocats.some(c=>c.id!==id&&String(c.nome).toLowerCase()===nome.toLowerCase())){ $('#mc-nome').focus(); toast('Já existe uma categoria com esse nome',1); return; }
+  const now=new Date().toISOString(), data={nome,desc:$('#mc-desc').value.trim(),img:MIOC.img||null,ord:parseInt($('#mc-ord').value)||0,on:$('#mc-on').checked,updatedAt:now};
+  const ok=id?await write(()=>DB.doc('miolocats/'+id).update(data),'Categoria salva'):await (async()=>{ const ref=DB.collection('miolocats').doc(); return write(()=>DB.doc('miolocats/mc_'+ref.id).set({...data,at:now}),'Categoria criada'); })();
+  if(!ok) return; MIOC.saved=true; const keep=new Set(mioIds(MIOC.img)); mioDeleteAssets(MIOC.old.filter(x=>!keep.has(x))); logAct(id?'Categoria de miolo alterada':'Categoria de miolo criada',nome); MIOC=null; closeModal();
+}
+
+/* --- modelo --- */
+function openMioModel(id){
+  const m=id?D.miolos.find(x=>x.id===id):null; if(id&&!m) return; delArm=null;
+  const v=m||{nome:'',codigo:'',cat:S.mioCat||(D.miolocats[0]||{}).id||'',desc:'',anos:[],tamanhos:[],formatos:[],cores:[],bloqueios:[],secoes:[],galeria:[],paginas:[],demo:null,producao:[],produtos:[],ord:D.miolos.length+1,destaque:false,on:false,indisp:false,indispMsg:''};
+  const cl=x=>JSON.parse(JSON.stringify(x||[]));
+  MIOM={id:id||'',galeria:cl(v.galeria),paginas:cl(v.paginas),cores:cl(v.cores).map(c=>({nome:c.nome||'',hex:c.hex||'#e7b5a2',disp:c.disp!==false,imgs:c.imgs||[]})),demo:v.demo||null,demoNome:v.demoNome||'',producao:cl(v.producao),fresh:[],saved:false,
+    old:[...(v.galeria||[]),...(v.paginas||[]),...(v.cores||[]).flatMap(c=>c.imgs||[])].flatMap(mioIds).concat(v.demo?[v.demo]:[],(v.producao||[]).map(p=>p.id))};
+  const blText=(v.bloqueios||[]).map(b=>[b.cor,b.tamanho,b.ano].filter(Boolean).join(' + ')).join('\n');
+  $('#modalRoot').innerHTML=`<div class="overlay" data-close><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mmt" style="width:min(860px,100%)">
+    <div class="modal-head"><div><h3 id="mmt">${m?esc(m.codigo+' · '+m.nome):'Novo modelo de miolo'}</h3>${m&&m.on===true?`<small><a class="linkish" href="/miolos?m=${encodeURIComponent(m.codigo)}" target="_blank" rel="noopener">Ver no site</a></small>`:''}</div><button class="close" data-x aria-label="Fechar"><i data-lucide="x"></i></button></div>
+    <form id="mmForm" class="modal-body form" style="display:grid">
+      <label><span>Nome do modelo <span class="req">*</span></span><input class="inp" id="mm-nome" maxlength="80" value="${esc(v.nome)}" placeholder="Ex.: Floral"></label>
+      <label><span>Código <span class="req">*</span></span><input class="inp" id="mm-codigo" maxlength="20" value="${esc(v.codigo)}" placeholder="Ex.: AG1D-01" style="text-transform:uppercase"></label>
+      <label><span>Categoria <span class="req">*</span></span><select class="inp" id="mm-cat">${D.miolocats.map(c=>`<option value="${esc(c.id)}" ${v.cat===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}</select></label>
+      <label>Ordem na categoria<input class="inp tnum" id="mm-ord" type="number" min="0" step="1" value="${esc(v.ord??'')}"></label>
+      <label class="full">Descrição<textarea class="inp" id="mm-desc" rows="3" maxlength="1200" placeholder="Como é o miolo, para quem é, papel, gramatura…">${esc(v.desc||'')}</textarea></label>
+      <div class="fieldset full"><h4>Cores</h4><div id="mm-cores">${mioCoresHtml()}</div>
+        <button type="button" class="btn sm" data-mmcoradd style="align-self:flex-start"><i data-lucide="plus"></i>Adicionar cor</button>
+        <p class="hint">Cada cor pode ter as próprias prévias (aparecem no site quando o cliente escolhe a cor). Desmarque “Disponível” para mostrar a cor como indisponível.</p></div>
+      <div class="fieldset full"><h4>Tamanhos, ano e formatos</h4><div class="form">
+        <label class="full">Tamanhos<input class="inp" id="mm-tam" value="${esc(mioListText(v.tamanhos,'nome'))}" placeholder="Ex.: A5 (14,8 × 21 cm); A4 (21 × 29,7 cm) [indisponível]"></label>
+        <label>Ano (quando houver)<input class="inp" id="mm-anos" value="${esc(mioListText(v.anos,'ano'))}" placeholder="Ex.: 2027; 2026 [indisponível]"></label>
+        <label>Formatos<input class="inp" id="mm-form" value="${esc((v.formatos||[]).join('; '))}" placeholder="Ex.: Espiral; Capa dura"></label></div>
+        <p class="hint">Separe com ponto e vírgula. Medidas entre parênteses; escreva [indisponível] para mostrar a opção sem deixar escolher.</p>
+        <label class="full">Combinações indisponíveis<textarea class="inp" id="mm-bloq" rows="2" placeholder="Uma por linha. Ex.: Verde-sálvia + A4">${esc(blText)}</textarea></label>
+        <p class="hint">Use os mesmos nomes de cor, tamanho e ano cadastrados acima. O site não deixa escolher essas combinações, e o servidor confere de novo no pedido.</p></div>
+      <label class="full">Seções incluídas<textarea class="inp" id="mm-secoes" rows="3" placeholder="Uma por linha. Ex.: Calendário, Planejamento mensal, Controle financeiro, Dados pessoais, Anotações">${esc((v.secoes||[]).join('\n'))}</textarea></label>
+      <div class="fieldset full"><h4>Prévias (galeria do modelo)</h4><div class="pimgs" id="mm-galeria">${mioPicsHtml(MIOM.galeria,'galeria')}</div>
+        ${ASSETS?`<label class="btn sm" style="align-self:flex-start;cursor:pointer"><i data-lucide="image-plus"></i>Enviar prévias<input type="file" id="mm-file-galeria" accept="image/png,image/jpeg,image/webp" multiple hidden></label>`:''}
+        <p class="hint">Até 12 imagens reais das páginas internas. Ideal: em pé, 3 por 4. As imagens são reduzidas automaticamente.</p></div>
+      <div class="fieldset full"><h4>Miolo completo (para folhear no site)</h4><div class="pimgs" id="mm-paginas">${mioPicsHtml(MIOM.paginas,'paginas',true)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${ASSETS?`<label class="btn sm" style="cursor:pointer"><i data-lucide="images"></i>Enviar páginas<input type="file" id="mm-file-paginas" accept="image/png,image/jpeg,image/webp" multiple hidden></label>`:''}${MIOM.paginas.length?'<button type="button" class="btn sm" data-mmpagclear><i data-lucide="trash-2"></i>Remover todas</button>':''}</div>
+        <p class="hint">Uma imagem por página, em ordem (os arquivos enviados juntos entram pela ordem do nome: 01, 02, 03…). Até 400 páginas, mas cada página ocupa espaço: prefira uma amostra representativa. Use sempre uma versão de prévia, nunca o arquivo de impressão.</p></div>
+      <div class="fieldset full"><h4>PDF de demonstração (público)</h4><div id="mm-demo">${mioDemoHtml()}</div>
+        ${ASSETS?`<label class="btn sm" style="align-self:flex-start;cursor:pointer"><i data-lucide="file-up"></i>${MIOM.demo?'Trocar PDF':'Enviar PDF'}<input type="file" id="mm-file-demo" accept="application/pdf" hidden></label>`:''}
+        <p class="hint">Opcional, até 8 MB. Qualquer pessoa no site pode abrir este PDF: use um arquivo separado só para mostrar (com marca d’água, se quiser).</p></div>
+      <div class="fieldset full"><h4>Arquivos de produção (privados)</h4><div id="mm-prod">${mioProdHtml()}</div>
+        ${ASSETS?`<label class="btn sm" style="align-self:flex-start;cursor:pointer"><i data-lucide="lock"></i>Enviar arquivo de produção<input type="file" id="mm-file-prod" accept="application/pdf,image/png,image/jpeg" multiple hidden></label>`:''}
+        <p class="hint">Ficam só no painel (para quem tem acesso aos arquivos). Nunca aparecem no site, nem para quem comprou.</p></div>
+      <div class="fieldset full"><h4>Produtos que usam este miolo</h4><div class="mio-prods">${D.products.length?D.products.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name))).map(p=>`<label class="chk"><input type="checkbox" data-mmprod="${esc(p.id)}" ${(v.produtos||[]).includes(p.id)?'checked':''}>${esc(p.name)} <small class="hint">${p.mode==='compra'?'compra direta':'sob orçamento'}${p.digital?' · digital':''}${p.on===false?' · oculto':''}</small></label>`).join(''):'<p class="hint">Cadastre os produtos em Loja online → Produtos.</p>'}</div>
+        <p class="hint">No site, o botão “Escolher este miolo” leva para estes produtos, e a página deles mostra o miolo escolhido. Sem produto marcado, o site oferece o pedido de orçamento pelo WhatsApp.</p></div>
+      <label class="chk"><input type="checkbox" id="mm-on" ${v.on===true?'checked':''}>Publicado no site</label>
+      <label class="chk"><input type="checkbox" id="mm-dest" ${v.destaque?'checked':''}>Destaque (aparece primeiro)</label>
+      <label class="chk"><input type="checkbox" id="mm-indisp" ${v.indisp?'checked':''}>Indisponível no momento (aparece, mas não dá para escolher)</label>
+      <label>Aviso de indisponível<input class="inp" id="mm-imsg" maxlength="160" value="${esc(v.indispMsg||'')}" placeholder="Ex.: Volta em novembro."></label>
+    </form>
+    <div class="modal-foot">${m?`<button class="btn danger" data-mmdel="${esc(m.id)}" style="margin-right:auto"><i data-lucide="trash-2"></i>Excluir</button>`:''}<button class="btn" data-x>Cancelar</button><button class="btn primary" data-mmsave="${m?esc(m.id):''}"><i data-lucide="check"></i>${m?'Salvar modelo':'Cadastrar modelo'}</button></div></div></div>`;
+  icons(); if(!m) $('#mm-nome').focus();
+}
+function mioCoresHtml(){ return MIOM.cores.map((c,i)=>`<div class="mio-cor"><div class="form" style="grid-template-columns:minmax(0,1.4fr) auto auto auto;align-items:end">
+    <label>Cor ${i+1}<input class="inp" data-mmcor="${i}:nome" maxlength="40" value="${esc(c.nome)}" placeholder="Ex.: Rosa"></label>
+    <label>Amostra<input type="color" class="inp mio-hex" data-mmcor="${i}:hex" value="${esc(/^#[0-9a-f]{6}$/i.test(c.hex)?c.hex:'#e7b5a2')}"></label>
+    <label class="chk" style="padding-bottom:10px"><input type="checkbox" data-mmcor="${i}:disp" ${c.disp!==false?'checked':''}>Disponível</label>
+    <button type="button" class="btn sm" data-mmcordel="${i}" aria-label="Remover a cor ${i+1}"><i data-lucide="trash-2"></i></button></div>
+    <div class="pimgs" style="margin-top:8px">${mioPicsHtml(c.imgs||[],'cor'+i)}</div>
+    ${ASSETS?`<label class="btn sm" style="align-self:flex-start;cursor:pointer;margin-top:6px"><i data-lucide="image-plus"></i>Prévias desta cor<input type="file" data-mmcorfile="${i}" accept="image/png,image/jpeg,image/webp" multiple hidden></label>`:''}</div>`).join('')||'<p class="hint">Nenhuma cor cadastrada.</p>'; }
+function mioDemoHtml(){ return MIOM.demo?`<div class="row"><i data-lucide="file-text"></i><div class="grow"><b>${esc(MIOM.demoNome||'PDF de demonstração')}</b><small><a class="linkish" href="/_blob/${esc(MIOM.demo)}" target="_blank" rel="noopener">Abrir</a></small></div><button type="button" class="btn sm" data-mmdemodel><i data-lucide="x"></i>Remover</button></div>`:'<p class="hint">Nenhum PDF de demonstração.</p>'; }
+function mioProdHtml(){ return MIOM.producao.length?`<div class="list">${MIOM.producao.map((p,i)=>`<div class="row"><i data-lucide="lock"></i><div class="grow"><b>${esc(p.name||'arquivo')}</b><small><a class="linkish" href="/_blob/${esc(p.id)}" target="_blank" rel="noopener">Abrir</a> · só no painel</small></div><button type="button" class="btn sm" data-mmproddel="${i}"><i data-lucide="x"></i>Remover</button></div>`).join('')}</div>`:'<p class="hint">Nenhum arquivo de produção.</p>'; }
+function mioSyncCores(){ document.querySelectorAll('[data-mmcor]').forEach(inp=>{ const [i,k]=inp.dataset.mmcor.split(':'); const c=MIOM.cores[+i]; if(!c) return; c[k]=k==='disp'?inp.checked:inp.value; }); }
+function mioRedraw(part){
+  if(!MIOM) return;
+  if(part==='cores'){ mioSyncCores(); $('#mm-cores').innerHTML=mioCoresHtml(); }
+  else if(part==='galeria'||part==='paginas') $('#mm-'+part).innerHTML=mioPicsHtml(MIOM[part],part,part==='paginas');
+  else if(part==='demo') $('#mm-demo').innerHTML=mioDemoHtml();
+  else if(part==='prod') $('#mm-prod').innerHTML=mioProdHtml();
+  icons();
+}
+function mioListOf(kind){ if(kind==='mcimg') return {list:MIOC.img?[MIOC.img]:[],set:l=>{ MIOC.img=l[0]||null; $('#mc-img').innerHTML=mioPicsHtml(MIOC.img?[MIOC.img]:[],'mcimg'); icons(); }};
+  if(kind==='galeria'||kind==='paginas') return {list:MIOM[kind],set:l=>{ MIOM[kind]=l; mioRedraw(kind); }};
+  const i=+kind.slice(3); return {list:MIOM.cores[i].imgs,set:l=>{ MIOM.cores[i].imgs=l; mioRedraw('cores'); }}; }
+async function saveMioModel(id){
+  mioSyncCores();
+  const g=k=>$('#mm-'+k).value.trim(), nome=g('nome').replace(/\s+/g,' '), codigo=g('codigo').toUpperCase().replace(/\s+/g,''), cat=$('#mm-cat').value;
+  if(nome.length<2){ $('#mm-nome').focus(); toast('Informe o nome do modelo',1); return; }
+  if(!MIO_CODE.test(codigo)){ $('#mm-codigo').focus(); toast('Código: letras, números e hífen (ex.: AG1D-01), até 20 caracteres',1); return; }
+  if(D.miolos.some(m=>m.id!==id&&String(m.codigo).toUpperCase()===codigo)){ $('#mm-codigo').focus(); toast(`O código ${codigo} já está em outro modelo`,1); return; }
+  if(!D.miolocats.some(c=>c.id===cat)){ toast('Escolha a categoria',1); return; }
+  const cores=MIOM.cores.map(c=>({nome:String(c.nome||'').trim().slice(0,40),hex:/^#[0-9a-f]{6}$/i.test(c.hex)?c.hex.toLowerCase():'#e7b5a2',disp:c.disp!==false,imgs:c.imgs||[]}));
+  if(cores.some(c=>!c.nome)){ toast('Dê um nome para cada cor (ou remova a cor vazia)',1); return; }
+  const dup=a=>a.find((x,i)=>a.findIndex(y=>y.toLowerCase()===x.toLowerCase())!==i);
+  const tamanhos=mioListParse(g('tam'),'nome'), anos=mioListParse(g('anos'),'ano');
+  const d1=dup(cores.map(c=>c.nome))||dup(tamanhos.map(t=>t.nome))||dup(anos.map(a=>a.ano)); if(d1){ toast(`“${d1}” aparece duas vezes`,1); return; }
+  const bloqueios=[]; for(const ln of g('bloq').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,60)){
+    const b={}; for(const tk of ln.split('+').map(x=>x.trim()).filter(Boolean)){ const k=tk.toLowerCase(), c=cores.find(x=>x.nome.toLowerCase()===k), t=tamanhos.find(x=>x.nome.toLowerCase()===k), a=anos.find(x=>x.ano.toLowerCase()===k);
+      if(c) b.cor=c.nome; else if(t) b.tamanho=t.nome; else if(a) b.ano=a.ano; else { $('#mm-bloq').focus(); toast(`Combinação “${ln}”: “${tk}” não é uma cor, tamanho ou ano deste modelo`,1); return; } }
+    bloqueios.push(b); }
+  const produtos=[...document.querySelectorAll('[data-mmprod]')].filter(x=>x.checked).map(x=>x.dataset.mmprod);
+  const on=$('#mm-on').checked;
+  if(on&&!MIOM.galeria.length&&!cores.some(c=>c.imgs.length)&&!MIOM.paginas.length){ toast('Para publicar, envie pelo menos uma prévia (imagem real do miolo)',1); return; }
+  const now=new Date().toISOString();
+  const data={nome,codigo,cat,desc:g('desc'),ord:parseInt(g('ord'))||0,cores,tamanhos,anos,formatos:g('form').split(';').map(x=>x.trim()).filter(Boolean).slice(0,8),bloqueios,
+    secoes:g('secoes').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,30),galeria:MIOM.galeria,paginas:MIOM.paginas,demo:MIOM.demo||null,demoNome:MIOM.demoNome||'',producao:MIOM.producao,produtos,
+    destaque:$('#mm-dest').checked,on,indisp:$('#mm-indisp').checked,indispMsg:g('imsg'),updatedAt:now};
+  const ok=id?await write(()=>DB.doc('miolos/'+id).update(data),'Modelo salvo'):await (async()=>{ const ref=DB.collection('miolos').doc(); return write(()=>DB.doc('miolos/mm_'+ref.id).set({...data,at:now}),'Modelo cadastrado'); })();
+  if(!ok) return; MIOM.saved=true;
+  const keep=new Set([...data.galeria,...data.paginas,...cores.flatMap(c=>c.imgs)].flatMap(mioIds).concat(data.demo?[data.demo]:[],data.producao.map(p=>p.id)));
+  mioDeleteAssets(MIOM.old.filter(x=>!keep.has(x))); logAct(id?'Modelo de miolo alterado':'Modelo de miolo cadastrado',`${codigo} · ${nome}`); MIOM=null; closeModal();
+}
+
+/* --- cliques e arquivos --- */
+async function mioClick(el,d){
+  if(d.mcnew!==undefined){ openMioCat(null); return true; }
+  if(d.mcedit){ openMioCat(d.mcedit); return true; }
+  if(d.mcsave!==undefined){ saveMioCat(d.mcsave||null); return true; }
+  if(d.mcdel){ const n=D.miolos.filter(m=>m.cat===d.mcdel).length; if(n){ toast(`Esta categoria tem ${n} modelo(s). Mova ou exclua os modelos antes.`,1); return true; }
+    if(delArm!==d.mcdel){ delArm=d.mcdel; el.innerHTML='<i data-lucide="alert-triangle"></i>Confirmar exclusão'; icons(); return true; }
+    const c=D.miolocats.find(x=>x.id===d.mcdel); if(await write(()=>DB.doc('miolocats/'+d.mcdel).delete(),'Categoria excluída')){ mioDeleteAssets([...(MIOC?MIOC.old:[]),...(MIOC?MIOC.fresh:[])]); MIOC=null; logAct('Categoria de miolo excluída',c?.nome||''); closeModal(); } return true; }
+  if(d.mmnew!==undefined){ openMioModel(null); return true; }
+  if(d.mmedit){ openMioModel(d.mmedit); return true; }
+  if(d.mmsave!==undefined){ saveMioModel(d.mmsave||null); return true; }
+  if(d.mmdel){ if(delArm!==d.mmdel){ delArm=d.mmdel; el.innerHTML='<i data-lucide="alert-triangle"></i>Confirmar exclusão'; icons(); return true; }
+    const m=D.miolos.find(x=>x.id===d.mmdel); if(await write(()=>DB.doc('miolos/'+d.mmdel).delete(),'Modelo excluído')){ mioDeleteAssets([...(MIOM?MIOM.old:[]),...(MIOM?MIOM.fresh:[])]); MIOM=null; logAct('Modelo de miolo excluído',m?`${m.codigo} · ${m.nome}`:''); closeModal(); } return true; }
+  if(d.mmcoradd!==undefined){ mioSyncCores(); if(MIOM.cores.length>=24){ toast('Até 24 cores por modelo',1); return true; } MIOM.cores.push({nome:'',hex:'#e7b5a2',disp:true,imgs:[]}); mioRedraw('cores'); document.querySelector(`[data-mmcor="${MIOM.cores.length-1}:nome"]`)?.focus(); return true; }
+  if(d.mmcordel!==undefined){ mioSyncCores(); MIOM.cores.splice(+d.mmcordel,1); mioRedraw('cores'); return true; }
+  if(d.miodel){ const [kind,i]=d.miodel.split(':'); if(kind.startsWith('cor')) mioSyncCores(); const L=mioListOf(kind), l=L.list.slice(); l.splice(+i,1); L.set(l); return true; }
+  if(d.miomv){ const [kind,i,dir]=d.miomv.split(':'); if(kind.startsWith('cor')) mioSyncCores(); const L=mioListOf(kind), l=L.list.slice(), a=+i, b=a+(+dir); if(b<0||b>=l.length) return true; [l[a],l[b]]=[l[b],l[a]]; L.set(l); return true; }
+  if(d.mmpagclear!==undefined){ if(delArm!=='pag'){ delArm='pag'; el.innerHTML='<i data-lucide="alert-triangle"></i>Confirmar: remover todas'; icons(); return true; } delArm=null; MIOM.paginas=[]; mioRedraw('paginas'); return true; }
+  if(d.mmdemodel!==undefined){ MIOM.demo=null; MIOM.demoNome=''; mioRedraw('demo'); return true; }
+  if(d.mmproddel!==undefined){ MIOM.producao.splice(+d.mmproddel,1); mioRedraw('prod'); return true; }
+  return false;
+}
+async function mioChange(t){
+  if(t.id==='mio-fcat'){ S.mioCat=t.value; render(); return true; }
+  if(t.id==='mc-file'){ const fs=[...t.files]; t.value=''; if(!MIOC||!fs.length) return true; const l=[]; if(await mioUploadMany(fs.slice(0,1),MIOC,1,l,'imagem')){ MIOC.img=l[0]; $('#mc-img').innerHTML=mioPicsHtml([MIOC.img],'mcimg'); icons(); toast('Imagem enviada. Salve a categoria para publicar.'); } return true; }
+  if(t.id==='mm-file-galeria'||t.id==='mm-file-paginas'){ const kind=t.id.slice(8), fs=[...t.files]; t.value=''; if(!MIOM) return true; const n=await mioUploadMany(fs,MIOM,kind==='galeria'?12:400,MIOM[kind],kind==='galeria'?'prévia':'página'); mioRedraw(kind); if(n) toast(`${n} imagem(ns) enviada(s). Salve o modelo para publicar.`); return true; }
+  if(t.dataset.mmcorfile!==undefined){ const i=+t.dataset.mmcorfile, fs=[...t.files]; t.value=''; if(!MIOM) return true; mioSyncCores(); const n=await mioUploadMany(fs,MIOM,12,MIOM.cores[i].imgs,'prévia'); mioRedraw('cores'); if(n) toast('Prévia(s) da cor enviada(s). Salve o modelo para publicar.'); return true; }
+  if(t.id==='mm-file-demo'){ const f=t.files[0]; t.value=''; if(!MIOM||!f) return true; if(f.type!=='application/pdf'){ toast('Envie um arquivo PDF',1); return true; } if(f.size>8*1024*1024){ toast('PDF grande demais (máximo 8 MB)',1); return true; }
+    try{ toast('Enviando PDF…'); const r=await ASSETS.upload(f,{type:'application/pdf'}); MIOM.fresh.push(r.id); MIOM.demo=r.id; MIOM.demoNome=f.name.slice(0,120); mioRedraw('demo'); toast('PDF enviado. Salve o modelo para publicar.'); }catch(e){ toast(errMsg(e),1); } return true; }
+  if(t.id==='mm-file-prod'){ const fs=[...t.files]; t.value=''; if(!MIOM) return true; for(const f of fs){ if(f.size>8*1024*1024){ toast(`${f.name}: grande demais (máximo 8 MB)`,1); continue; }
+      try{ toast('Enviando '+f.name+'…'); const r=await ASSETS.upload(f,{type:typeFor(f)}); MIOM.fresh.push(r.id); MIOM.producao.push({id:r.id,name:f.name.slice(0,120),type:r.contentType,at:new Date().toISOString()}); }catch(e){ toast(`${f.name}: ${errMsg(e)}`,1); } }
+    mioRedraw('prod'); return true; }
+  return false;
+}

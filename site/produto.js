@@ -6,7 +6,7 @@
   var el = function (tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   var Cart = window.ESROCart, WA = 'https://wa.me/5511992481676';
   var slug = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
-  var p = null, qtd = 1, order = Cart.load();
+  var p = null, qtd = 1, order = Cart.load(), miolo = null, MKEY = 'esro_miolo';
   var PROD = 'A produção começa após a confirmação do pagamento via PIX ou do sinal de 50%.';
 
   // Contagem de visitas (sem cookies): registra só que uma página de produto foi aberta.
@@ -75,6 +75,44 @@
     showPrice();
   }
 
+  /* Miolo: produtos com modelos no catálogo "Escolha seu miolo" mostram a escolha (ou o convite para escolher). */
+  var norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim(); };
+  function stillOk(m, s) {   // a escolha guardada ainda vale? (modelo disponível e opções ainda liberadas)
+    if (!m || !m.disponivel) return false;
+    var has = function (list, v, f) { return !list.length ? !v : list.some(function (x) { return x.disp && norm(x[f]) === norm(v); }); };
+    if (!has(m.cores, s.cor, 'nome') || !has(m.tamanhos, s.tamanho, 'nome') || !has(m.anos, s.ano, 'ano')) return false;
+    return !m.bloqueios.some(function (b) { return (!b[0] || norm(b[0]) === norm(s.cor)) && (!b[1] || norm(b[1]) === norm(s.tamanho)) && (!b[2] || norm(b[2]) === norm(s.ano)); });
+  }
+  function loadMiolos() {
+    fetch('/api/miolos', { headers: { 'X-ESRO': '1' } }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d) return;
+      if (d.categorias.length) $('#navMiolos').hidden = false;
+      var mine = d.modelos.filter(function (m) { return m.produtos.some(function (x) { return x.id === p.id; }); });
+      if (!mine.length) return;
+      var saved = null; try { saved = JSON.parse(localStorage.getItem(MKEY) || 'null'); } catch (_) { }
+      var m = saved && mine.filter(function (x) { return x.codigo === saved.codigo; })[0];
+      miolo = m && stillOk(m, saved) ? saved : null;
+      drawMiolo(saved && !miolo && m ? 'O miolo escolhido antes não está mais disponível com essas opções. Escolha de novo.' : '');
+    }).catch(function () { });
+  }
+  function drawMiolo(warn) {
+    var box = $('#pdMiolo'), to = '/miolos?produto=' + encodeURIComponent(p.slug); box.textContent = ''; box.hidden = false;
+    var h = el('p', 'pd-miolo-t', 'Miolo (páginas internas)'); h.id = 'pdMioloT'; box.appendChild(h);
+    if (miolo) {
+      var row = el('div', 'pd-miolo-row');
+      if (/^\/miolos\/img\/[a-f0-9]{24}$/.test(miolo.thumb || '')) { var im = document.createElement('img'); im.src = miolo.thumb; im.alt = ''; row.appendChild(im); }
+      var t = el('div'); t.appendChild(el('b', null, miolo.rotulo || miolo.codigo)); var links = el('span', 'pd-miolo-links');
+      var a = el('a', null, 'Trocar'); a.href = to; links.appendChild(a);
+      var rm = el('button', 'linkish', 'Remover'); rm.type = 'button'; rm.addEventListener('click', function () { miolo = null; try { localStorage.removeItem(MKEY); } catch (_) { } drawMiolo(''); });
+      links.appendChild(rm); t.appendChild(links); row.appendChild(t); box.appendChild(row);
+    } else {
+      box.appendChild(el('p', 'pd-miolo-txt', 'Veja as páginas por dentro e escolha o modelo, a cor e o tamanho do miolo.'));
+      var go = el('a', 'btn secondary small', 'Escolher o miolo →'); go.href = to; box.appendChild(go);
+      box.appendChild(el('small', 'pd-miolo-opt', 'Opcional: se preferir, a ESRO combina o miolo com você depois do pedido.'));
+    }
+    if (warn) box.appendChild(el('p', 'msg bad', warn));
+  }
+
   function addToCart() {
     $('#pdMsg').hidden = true;
     var c = chosen(); if (c.missing) { fail('Escolha uma opção de "' + c.missing + '".'); return false; }
@@ -82,7 +120,7 @@
     if (p.personalizacao && !pers) { var box = $('#pd-pers-err'); box.textContent = 'Preencha este campo para a ESRO personalizar o produto.'; box.hidden = false; $('#pd-pers').setAttribute('aria-invalid', 'true'); $('#pd-pers').focus(); return false; }
     order = Cart.load();
     var ok = Cart.add(order, { nome: p.nome, qtd: qtd, img: p.imagens[0] || '', id: p.id, tipo: p.modo, vars: c.vars, pers: pers, preco: p.modo === 'compra' ? Math.round((p.preco + c.add) * 100) / 100 : 0, slug: p.slug,
-      base: p.modo === 'compra' ? p.preco : 0, add: c.add, faixas: p.faixasQtd || [] });
+      base: p.modo === 'compra' ? p.preco : 0, add: c.add, faixas: p.faixasQtd || [], miolo: miolo ? { codigo: miolo.codigo, cor: miolo.cor, tamanho: miolo.tamanho, ano: miolo.ano, rotulo: miolo.rotulo } : null });
     Cart.reprice(order);
     if (!ok) { fail('O pedido pode ter até 20 itens diferentes.'); return false; }
     Cart.save(order); count(); track('carrinho'); return true;
@@ -98,6 +136,6 @@
 
   fetch('/api/produtos/' + encodeURIComponent(slug), { headers: { 'X-ESRO': '1' }, cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
     if (!d || !d.produto) { $('#pdNote').textContent = ''; var a = el('a', 'btn primary', 'Ver os produtos da ESRO'); a.href = '/#kits'; $('#pdNote').appendChild(a); $('#pdMain').className = 'pd-main empty'; $('#pdMain').textContent = '♥'; return; }
-    p = d.produto; render();
+    p = d.produto; render(); loadMiolos();
   }).catch(function () { $('#pdNote').textContent = 'Não foi possível carregar as opções deste produto. Confira a internet e atualize a página.'; });
 })();

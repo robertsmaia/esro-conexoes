@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Escolha o miolo da sua agenda, planner ou caderno personalizado da ESRO: veja as páginas internas, as cores e os tamanhos antes de pedir.">
+  <title>Escolha seu miolo | ESRO Papelaria</title>
+  <link rel="canonical" href="https://www.esro-papelaria.com.br/miolos">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ESRO Papelaria">
+  <meta property="og:title" content="Escolha seu miolo | ESRO Papelaria">
+  <meta property="og:description" content="Veja as páginas internas das agendas, planners e cadernos personalizados da ESRO e escolha o seu.">
+  <meta property="og:locale" content="pt_BR">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23E7B5A2'/%3E%3Cpath d='M18 25c0-8 10-10 14-2 4-8 14-6 14 2 0 10-14 19-14 19S18 35 18 25Z' fill='none' stroke='%2340261C' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/conta.css">
+  <link rel="stylesheet" href="/loja.css">
+  <link rel="stylesheet" href="/miolos.css">
+</head>
+<body data-page="miolos">
+  <a class="skip" href="#mlMain">Pular para o catálogo</a>
+  <div class="top"><a href="https://wa.me/5511992481676" target="_blank" rel="noopener noreferrer">Pedidos e orçamentos pelo WhatsApp: (11) 99248-1676</a></div>
+  <header class="header">
+    <nav class="wrap nav" aria-label="Navegação">
+      <a class="brand" href="/" aria-label="ESRO, página inicial">Esro<span aria-hidden="true">♥</span></a>
+      <div class="nav-links"><a class="back" href="/#kits">Produtos</a><a class="cart-link" id="cartLink" href="/#pedido" aria-label="Abrir o meu pedido"><span>Meu pedido</span><b id="cartCount">0</b></a></div>
+    </nav>
+  </header>
+
+  <main class="shop ml" id="mlMain" tabindex="-1">
+    <div class="wrap">
+      <p class="crumb" id="mlCrumb"><a href="/">Início</a> › <span>Escolha seu miolo</span></p>
+
+      <section class="ml-hero" aria-labelledby="mlTitle">
+        <span class="eyebrow">Escolha seu miolo</span>
+        <h1 id="mlTitle">Como você quer organizar sua rotina?</h1>
+        <p class="ml-lead">Veja por dentro as agendas, os planners e os cadernos personalizados da ESRO. Folheie as páginas, escolha a cor e o tamanho e leve o miolo escolhido para o seu pedido.</p>
+        <p class="ml-for" id="mlFor" role="status" hidden></p>
+      </section>
+
+      <form class="ml-tools" id="mlTools" role="search" aria-label="Buscar e filtrar modelos" hidden>
+        <label class="ml-search"><span class="sr">Buscar por nome ou código</span>
+          <input type="search" id="mlQ" name="q" maxlength="60" placeholder="Buscar pelo nome ou código" autocomplete="off"></label>
+        <button class="btn secondary small ml-ftoggle" type="button" id="mlFToggle" aria-expanded="false" aria-controls="mlFilters">Filtros <b id="mlFCount" hidden></b></button>
+        <div class="ml-filters" id="mlFilters">
+          <label>Categoria<select id="mlFCat" name="cat"><option value="">Todas</option></select></label>
+          <label id="mlFAnoBox">Ano<select id="mlFAno" name="ano"><option value="">Todos</option></select></label>
+          <label id="mlFCorBox">Cor<select id="mlFCor" name="cor"><option value="">Todas</option></select></label>
+          <label id="mlFTamBox">Tamanho<select id="mlFTam" name="tam"><option value="">Todos</option></select></label>
+          <button class="linkbtn" type="button" id="mlClear">Limpar filtros</button>
+        </div>
+      </form>
+
+      <p class="ml-loading" id="mlLoading" role="status">Carregando os modelos…</p>
+      <div id="mlView" aria-live="polite"></div>
+      <noscript><p class="msg bad">Para ver os modelos é preciso ativar o JavaScript do navegador. Você também pode pedir os modelos pelo WhatsApp.</p></noscript>
+    </div>
+  </main>
+
+  <div class="mv" id="mv" role="dialog" aria-modal="true" aria-labelledby="mvTitle" hidden>
+    <div class="mv-head">
+      <button class="btn secondary small" type="button" id="mvBack">← Voltar ao modelo</button>
+      <div class="mv-title"><b id="mvTitle"></b><span id="mvCount" aria-live="polite"></span></div>
+      <div class="mv-tools"><button class="mv-icon" type="button" id="mvZoom" aria-pressed="false" aria-label="Ampliar a página">＋</button><button class="mv-icon" type="button" id="mvClose" aria-label="Fechar">✕</button></div>
+    </div>
+    <div class="mv-stage" id="mvStage">
+      <button class="mv-nav prev" type="button" id="mvPrev" aria-label="Página anterior">‹</button>
+      <div class="mv-scroll" id="mvScroll"><img id="mvImg" alt="" decoding="async"><p class="mv-wait" id="mvWait">Carregando a página…</p></div>
+      <button class="mv-nav next" type="button" id="mvNext" aria-label="Próxima página">›</button>
+    </div>
+    <div class="mv-thumbs" id="mvThumbs" role="list" aria-label="Miniaturas das páginas"></div>
+  </div>
+
+  <footer class="foot-mini"><div class="wrap"><span>© 2026 ESRO. Papelaria com propósito.</span><span><a href="/entregas">Entregas e trocas</a> · <a href="/privacidade">Política de Privacidade</a></span></div></footer>
+  <script src="/carrinho.js"></script>
+  <script src="/miolos.js"></script>
+</body>
+</html>

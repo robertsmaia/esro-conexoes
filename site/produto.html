@@ -28,7 +28,7 @@
   <header class="header">
     <nav class="wrap nav" aria-label="Navegação">
       <a class="brand" href="/" aria-label="ESRO, página inicial">Esro<span aria-hidden="true">♥</span></a>
-      <div class="nav-links"><a class="back" href="/#kits">Ver todos os produtos</a><a class="cart-link" id="cartLink" href="/#pedido" aria-label="Abrir o meu pedido"><span>Meu pedido</span><b id="cartCount">0</b></a></div>
+      <div class="nav-links"><a class="back" href="/miolos" id="navMiolos" hidden>Escolha seu miolo</a><a class="back" href="/#kits">Ver todos os produtos</a><a class="cart-link" id="cartLink" href="/#pedido" aria-label="Abrir o meu pedido"><span>Meu pedido</span><b id="cartCount">0</b></a></div>
     </nav>
   </header>
 
@@ -48,6 +48,7 @@
           <p class="pd-stock" id="pdStock" role="status" hidden></p>
           <p class="pd-text" id="pdText">%%TEXT%%</p>
           <form id="pdForm" novalidate hidden>
+            <section class="pd-miolo" id="pdMiolo" aria-labelledby="pdMioloT" hidden></section>
             <div id="pdOptions"></div>
             <label class="field" id="pdPersField" hidden><span class="lab"><span id="pdPersLabel"></span></span>
               <span class="line"><input type="text" id="pd-pers" name="pers" maxlength="120" autocomplete="off" aria-describedby="pd-pers-err"></span>

@@ -243,6 +243,9 @@
 
   /* ---------- Menu, filtros do "o que você precisa hoje" ---------- */
   $$('.chips').forEach(function (group) { $$('.chip', group).forEach(function (chip) { chip.addEventListener('click', function () { $$('.chip', group).forEach(function (c) { c.classList.remove('active'); }); chip.classList.add('active'); }); }); });
+  // "Escolha seu miolo" aparece no menu só quando há modelos publicados.
+  var navM = document.getElementById('navMiolos');
+  if (navM) fetch('/api/miolos', { headers: { 'X-ESRO': '1' } }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) { if (d && d.categorias && d.categorias.length) navM.hidden = false; }).catch(function () { });
   var menu = $('.menu'), links = $('.links');
   if (menu && links) {
     menu.addEventListener('click', function () { menu.setAttribute('aria-expanded', String(links.classList.toggle('mobile-open'))); });

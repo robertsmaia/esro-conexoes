@@ -276,6 +276,13 @@ Passo a passo nas seções 13 e 14 do **PASSO-A-PASSO-LOJA.md**. Resumo técnico
 - Migração única `migracao:precos-2026-10` (tabela `kv`) em `src/precos.js`: atualiza produtos, catálogo c07, prazo e cria "Material pronto" desligado. Não toca em pedidos.
 - Depoimentos: coleção `depoimentos` do painel; `GET /api/depoimentos` (só aprovados e autorizados), `POST /api/depoimentos` (exige o link secreto do pedido e a autorização; um por pedido; 6 por hora por endereço) e `GET /api/depoimentos/pedido/<código>`; pela conta, `POST /api/conta/depoimentos` (só pedidos da ficha do cliente, enviados ou concluídos). Instagram: `GET /painel/api/depoimentos/instagram` lê os comentários (permissão `instagram_business_manage_comments`) e o webhook guarda os do campo `comments`; só os elogios são sugeridos.
 
+### 9.13 Escolha seu miolo (versão 1.6)
+Passo a passo na seção 15 do **PASSO-A-PASSO-LOJA.md**. Resumo técnico (`src/miolos.js`):
+- Coleções do painel `miolocats` e `miolos`. Imagens guardadas como `{ f: id grande, t: id miniatura }` em `panel_assets`.
+- `GET /api/miolos`: só modelos publicados de categorias ativas; categorias só com modelo disponível. O campo `producao` nunca sai.
+- `GET /miolos/img/<id>` e `GET /miolos/demo/<id>`: só imagens de prévia e o PDF de demonstração de modelos publicados (com `Content-Security-Policy: sandbox`).
+- No carrinho, o item pode ter `miolo: { codigo, cor, tamanho, ano }`; `checkItems` confere modelo publicado e disponível, compatível com o produto, opções liberadas e combinações, e grava como a opção “Modelo do miolo”.
+
 ## 10. Segurança
 
 O que o servidor já faz sozinho e o que depende de você está no arquivo **SEGURANCA.md**. Em resumo:

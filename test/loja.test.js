@@ -527,3 +527,61 @@ test('Depoimentos: só o cliente do pedido escreve, com autorização; o site mo
   let last; for (let i = 0; i < 8; i++) last = (await s('POST', '/depoimentos', { ...ok, token: 'y'.repeat(43) })).status;
   assert.equal(last, 429);
 });
+
+test('Miolos: o site só vê modelos publicados de categorias com modelo disponível; arquivos de produção nunca saem; o miolo é conferido na compra', async (t) => {
+  const X = await mk({}, {}, [{ id: 'prd_agenda27', data: { name: 'Agenda personalizada 2027', slug: 'agenda-personalizada-2027', mode: 'compra', price: 59.9, imgs: [], vars: [], pers: 'Nome na capa', stock: null, peso: 300, c: 25, l: 18, a: 3, digital: false, on: true, vitrine: true },
+    }, { id: 'prd_caderno', data: { name: 'Caderno', slug: 'caderno', mode: 'compra', price: 42, imgs: [], vars: [], pers: '', stock: null, peso: 300, c: 25, l: 18, a: 3, digital: false, on: true, vitrine: true } }]);
+  t.after(async () => { X.server.close(); await X.pg.close(); });
+  const s = (m, p, b) => call(X.base, '/api')(m, p, b);
+  await X.repo.docSet('settings', 'loja', LOJA);
+  const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex'), id = (n) => n.toString(16).padStart(24, 'a');
+  for (const n of [1, 2, 3, 4, 5, 6, 7, 9]) await X.repo.assetPut({ id: id(n), name: 'p' + n + '.png', type: 'image/png', data: PNG });
+  await X.repo.assetPut({ id: id(8), name: 'demo.pdf', type: 'application/pdf', data: Buffer.from('%PDF-1.4\n%demo') });
+  const P = (n) => ({ f: id(n), t: id(n) });
+  // Sem nada cadastrado: nada aparece
+  assert.deepEqual(await (await s('GET', '/miolos')).json(), { categorias: [], modelos: [] });
+  await X.repo.docSet('miolocats', 'c1', { nome: 'Agenda com 1 dia por página', desc: 'Um dia inteiro em cada página.', ord: 1, on: true });
+  await X.repo.docSet('miolocats', 'c2', { nome: 'Agenda jurídica', ord: 2, on: true });       // só modelo não publicado
+  await X.repo.docSet('miolocats', 'c3', { nome: 'Planners', ord: 3, on: false });             // categoria desligada
+  await X.repo.docSet('miolocats', 'c4', { nome: 'Cadernos e anotações', ord: 4, on: true });  // só modelo indisponível
+  await X.repo.docSet('miolos', 'm1', { nome: 'Floral', codigo: 'ag1d-01', cat: 'c1', desc: 'Miolo com flores delicadas.', on: true, ord: 1,
+    cores: [{ nome: 'Rosa', hex: '#E7B5A2', imgs: [P(1)] }, { nome: 'Verde', hex: '#9da180', disp: false, imgs: [P(9)] }], tamanhos: [{ nome: 'A5', medida: '14,8 × 21 cm' }, { nome: 'A4' }], anos: [{ ano: '2027' }],
+    bloqueios: [{ cor: 'Rosa', tamanho: 'A4' }], formatos: ['Espiral'], secoes: ['Calendário', 'Planejamento mensal', 'Controle financeiro'], galeria: [P(2)], paginas: [P(3), P(4)], demo: id(8),
+    producao: [{ id: id(5), name: 'miolo-impressao.pdf' }], produtos: ['prd_agenda27', 'prd_inexistente'] });
+  await X.repo.docSet('miolos', 'm2', { nome: 'Rascunho', codigo: 'JUR-01', cat: 'c2', on: false, galeria: [P(6)], produtos: ['prd_agenda27'] });
+  await X.repo.docSet('miolos', 'm3', { nome: 'Semanal', codigo: 'PL-01', cat: 'c3', on: true, galeria: [P(7)], produtos: ['prd_agenda27'] });
+  await X.repo.docSet('miolos', 'm4', { nome: 'Pontilhado', codigo: 'CD-01', cat: 'c4', on: true, indisp: true, produtos: ['prd_caderno'] });
+  await X.repo.docSet('miolos', 'm5', { nome: 'Esgotado', codigo: 'AG1D-02', cat: 'c1', on: true, indisp: true, indispMsg: 'Volta em novembro.', produtos: ['prd_agenda27'] });
+  const r = await s('GET', '/miolos'), j = await r.json(), raw = JSON.stringify(j);
+  assert.deepEqual(j.categorias.map(c => [c.nome, c.total, c.img?.src]), [['Agenda com 1 dia por página', 1, '/miolos/img/' + id(2)]]);
+  assert.deepEqual(j.modelos.map(m => [m.codigo, m.disponivel, m.aviso]), [['AG1D-01', true, ''], ['AG1D-02', false, 'Volta em novembro.'], ['CD-01', false, 'Indisponível no momento.']]);
+  const m1 = j.modelos[0];
+  assert.deepEqual(m1.produtos, [{ id: 'prd_agenda27', slug: 'agenda-personalizada-2027', nome: 'Agenda personalizada 2027', modo: 'compra' }]);
+  assert.deepEqual([m1.cores.map(c => [c.nome, c.hex, c.disp]), m1.paginas.length, m1.demo], [[['Rosa', '#e7b5a2', true], ['Verde', '#9da180', false]], 2, '/miolos/demo/' + id(8)]);
+  assert.ok(!raw.includes(id(5)) && !raw.includes('producao') && !raw.includes('impressao') && !raw.includes(id(6)) && !raw.includes(id(7)));
+  // Imagens: só as de modelos publicados; o arquivo de produção não sai nem sendo imagem
+  const get = (p) => fetch(X.base + p);
+  for (const n of [1, 2, 3, 9]) assert.equal((await get('/miolos/img/' + id(n))).status, 200, 'img ' + n);
+  for (const n of [5, 6, 7]) assert.equal((await get('/miolos/img/' + id(n))).status, 404, 'img ' + n);
+  const pdf = await get('/miolos/demo/' + id(8)); assert.equal(pdf.status, 200); assert.equal(pdf.headers.get('content-type'), 'application/pdf'); assert.match(pdf.headers.get('content-security-policy'), /sandbox/);
+  assert.equal((await get('/miolos/demo/' + id(1))).status, 404); assert.equal((await get('/miolos/img/' + id(8))).status, 404); assert.equal((await get('/img/' + id(1))).status, 404);
+  assert.equal((await get('/miolos')).status, 200);
+  assert.ok((await (await get('/sitemap.xml')).text()).includes('/miolos'));
+  // Compra: o miolo é conferido no servidor e entra como opção do item
+  const it = (miolo, extra = {}) => ({ id: 'prd_agenda27', qtd: 1, vars: {}, pers: 'Ana', miolo, ...extra });
+  const buy = (itens) => s('POST', '/compra', compra({ itens, entrega: 'retirada', cep: '' }));
+  const err = async (miolo, re, extra) => { const x = await buy([it(miolo, extra)]); assert.equal(x.status, 422, JSON.stringify(miolo)); assert.match((await x.json()).erro, re); };
+  await err({ codigo: 'XX-99', cor: 'Rosa', tamanho: 'A5', ano: '2027' }, /não está mais disponível/);
+  await err({ codigo: 'AG1D-02' }, /indisponível/);
+  await err({ codigo: 'PL-01' }, /não está mais disponível/);
+  await err({ codigo: 'AG1D-01', cor: 'Verde', tamanho: 'A5', ano: '2027' }, /Verde.*indisponível/);
+  await err({ codigo: 'AG1D-01', cor: 'Rosa', tamanho: 'A4', ano: '2027' }, /combinação/);
+  await err({ codigo: 'AG1D-01', cor: 'Rosa', tamanho: 'A3', ano: '2027' }, /tamanho/);
+  await err({ codigo: 'AG1D-01', cor: 'Rosa', tamanho: 'A5' }, /ano/);
+  await err({ codigo: 'AG1D-01', cor: 'Rosa', tamanho: 'A5', ano: '2027' }, /não é usado neste produto/, { id: 'prd_caderno', pers: '' });
+  const ok = await buy([it({ codigo: 'ag1d-01', cor: 'rosa', tamanho: 'A5', ano: '2027' }), { id: 'prd_agenda27', qtd: 1, vars: {}, pers: 'Bia' }]);
+  assert.equal(ok.status, 201);
+  const o = (await X.repo.orderByPub((await ok.json()).acompanhar.split('/').pop())).data;
+  assert.deepEqual(o.loja.itens.map(i => [i.vars, i.unit]), [[[['Modelo do miolo', 'AG1D-01 Floral · Rosa · A5 · 2027']], 59.9], [[], 59.9]]);
+  assert.match(o.note || '', /Modelo do miolo: AG1D-01 Floral · Rosa · A5 · 2027/);
+});

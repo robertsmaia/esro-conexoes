@@ -17,9 +17,11 @@
     if (!it || typeof it !== 'object') return null;
     var nome = str(it.nome, 120), qtd = Math.floor(Number(it.qtd)); if (!nome || !(qtd >= 1)) return null;
     var vars = {}; if (it.vars && typeof it.vars === 'object' && !Array.isArray(it.vars)) Object.keys(it.vars).slice(0, 4).forEach(function (k) { vars[str(k, 40)] = str(it.vars[k], 40); });
+    var mi = it.miolo && typeof it.miolo === 'object' ? { codigo: str(it.miolo.codigo, 20).toUpperCase(), cor: str(it.miolo.cor, 40), tamanho: str(it.miolo.tamanho, 30), ano: str(it.miolo.ano, 10), rotulo: str(it.miolo.rotulo, 160) } : null;
+    if (mi && !/^[A-Z0-9][A-Z0-9-]{1,19}$/.test(mi.codigo)) mi = null;   // miolo escolhido em "Escolha seu miolo" (conferido de novo no servidor)
     var img = String(it.img || ''); if (!/^\/?(assets|img)\/[\w\-./]+$/.test(img) || img.indexOf('..') >= 0) img = '';
     return { nome: nome, qtd: Math.min(99, qtd), img: img, id: str(it.id, 60), tipo: it.tipo === 'compra' ? 'compra' : 'orcamento', vars: vars, pers: str(it.pers, 120), preco: Math.max(0, Number(it.preco) || 0), slug: str(it.slug, 80),
-      base: Math.max(0, Number(it.base) || 0), add: Math.max(0, Number(it.add) || 0), faixas: tiers(it.faixas) };
+      base: Math.max(0, Number(it.base) || 0), add: Math.max(0, Number(it.add) || 0), faixas: tiers(it.faixas), miolo: mi };
   }
   function load() {
     try { var a = JSON.parse(localStorage.getItem(KEY) || '[]'); return (Array.isArray(a) ? a : []).map(clean).filter(Boolean).slice(0, 20); } catch (_) { return []; }
@@ -27,7 +29,7 @@
   function save(list) {
     try { if (list && list.length) localStorage.setItem(KEY, JSON.stringify(list.map(clean).filter(Boolean).slice(0, 20))); else localStorage.removeItem(KEY); } catch (_) { }
   }
-  var keyOf = function (it) { return (it.id || it.nome) + '|' + JSON.stringify(it.vars || {}) + '|' + (it.pers || ''); };
+  var keyOf = function (it) { var m = it.miolo; return (it.id || it.nome) + '|' + JSON.stringify(it.vars || {}) + '|' + (it.pers || '') + (m ? '|' + [m.codigo, m.cor, m.tamanho, m.ano].join('/') : ''); };
   // Junta com um item igual (mesmo produto, mesmas opções) ou acrescenta. Devolve false se o carrinho estiver cheio.
   function add(list, it) {
     it = clean(it); if (!it) return false;
@@ -37,7 +39,7 @@
     list.push(it); return true;
   }
   var detail = function (it) {
-    var parts = Object.keys(it.vars || {}).map(function (k) { return k + ': ' + it.vars[k]; });
+    var parts = (it.miolo ? ['Modelo do miolo: ' + (it.miolo.rotulo || it.miolo.codigo)] : []).concat(Object.keys(it.vars || {}).map(function (k) { return k + ': ' + it.vars[k]; }));
     if (it.pers) parts.push('Personalização: ' + it.pers);
     return parts.join(' · ');
   };
