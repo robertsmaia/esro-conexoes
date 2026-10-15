@@ -7,6 +7,7 @@ import { createApp } from '../src/app.js';
 import { SEED_PRODUCTS, slugify } from '../src/shop.js';
 import { migratePrices } from '../src/precos.js';
 import { seedMiolos } from './miolos-exemplo.mjs';
+import { importAgenda2027 } from '../src/miolos-agenda2027.js';
 
 const port = Number(process.argv[2] || 8787);
 // Com LOJA_SIMPLES=1 o servidor sobe sem Mercado Pago, Melhor Envio e e-mails (como fica antes de cadastrar as chaves no Render).
@@ -20,7 +21,8 @@ for (const p of SEED_PRODUCTS) await repo.docSet('products', p.id, p.data);
 // Loja de exemplo: três produtos de compra direta, um cupom, PIX e entrega configurados
 await repo.docSet('settings', 'store', { pixType: 'email', pixKey: 'pix@exemplo.com', pixName: 'ESRO PAPELARIA', pixCity: 'SAO PAULO', prazo: 'Para produtos físicos, prazo de produção e entrega são combinados no orçamento.' });
 await migratePrices(repo, slugify, { log() {} });
-if (process.env.SEM_MIOLOS !== '1') await seedMiolos(repo);   // catálogo de miolos de exemplo (só no servidor de teste)
+if (process.env.MIOLOS_REAIS === '1') await importAgenda2027(repo, { log() {} });   // os miolos de verdade da Agenda 2027
+else if (process.env.SEM_MIOLOS !== '1') await seedMiolos(repo);   // catálogo de miolos de exemplo (só no servidor de teste)
 await repo.docSet('settings', 'loja', { cepOrigem: '03000-000', retirada: { on: true, texto: 'Zona Leste de São Paulo, com hora marcada' }, faixas: [{ nome: 'Entrega ESRO (Grande São Paulo)', de: '01000-000', ate: '09999-999', valor: 12, prazo: 'até 3 dias úteis' }], gratisAcima: 150, prazoProducao: 5, combinar: true });
 await repo.docSet('products', 'prd_planner27', { name: 'Planner 2027 Floral', slug: 'planner-2027-floral', cat: 'Organização', desc: 'Planner em brochura com capa floral, divisórias mensais e folhas de planejamento semanal.\nA capa leva o seu nome.', mode: 'compra', price: 80, promo: { price: 72, until: '2099-12-31' },
   imgs: ['/assets/produtos/planner.svg', '/assets/produtos/agenda.svg'], vars: [{ nome: 'Tamanho', ops: [{ n: 'A5', add: 0 }, { n: 'A4', add: 15 }] }, { nome: 'Miolo', ops: [{ n: 'Pautado', add: 0 }, { n: 'Pontilhado', add: 0 }] }], pers: 'Nome para a capa', stock: 4, peso: 450, c: 25, l: 18, a: 3, digital: false, on: true, vitrine: true, ord: 0 });

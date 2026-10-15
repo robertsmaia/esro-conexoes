@@ -585,3 +585,21 @@ test('Miolos: o site só vê modelos publicados de categorias com modelo dispon�
   assert.deepEqual(o.loja.itens.map(i => [i.vars, i.unit]), [[[['Modelo do miolo', 'AG1D-01 Floral · Rosa · A5 · 2027']], 59.9], [[], 59.9]]);
   assert.match(o.note || '', /Modelo do miolo: AG1D-01 Floral · Rosa · A5 · 2027/);
 });
+
+test('Miolos da Agenda 2027: cadastro único com prévias, 3 categorias e 10 modelos ligados aos produtos', async (t) => {
+  const { importAgenda2027, MODELOS } = await import('../src/miolos-agenda2027.js');
+  const X = await mk({}, {}, [['prd_agenda', 'Agenda personalizada 2027'], ['prd_planner', 'Planner personalizado'], ['prd_caderno', 'Caderno personalizado']].map(([id, name]) => ({ id, data: { name, slug: slugify(name), mode: 'compra', price: 50, imgs: [], vars: [], pers: '', stock: null, peso: 300, c: 25, l: 18, a: 3, digital: false, on: true } })));
+  t.after(async () => { X.server.close(); await X.pg.close(); });
+  await X.repo.docSet('miolocats', 'ja_existe', { nome: 'Planners', desc: 'Categoria criada antes pela ESRO.', on: true, ord: 9 });
+  const r1 = await importAgenda2027(X.repo, { log() {} }); assert.equal(r1.criados.length, 10);
+  assert.deepEqual(await importAgenda2027(X.repo, { log() {} }), { feito: false });   // só uma vez
+  const j = await (await fetch(X.base + '/api/miolos')).json();
+  assert.deepEqual(j.categorias.map(c => [c.nome, c.total]), [['Agenda com 1 dia por página', 4], ['Agenda com 2 dias por página', 1], ['Planners', 5]]);
+  assert.equal(j.categorias[2].id, 'ja_existe');   // categoria com o mesmo nome é reaproveitada
+  assert.deepEqual(j.modelos.map(m => m.codigo).sort(), MODELOS.map(m => m.codigo).sort());
+  const d1 = j.modelos.find(m => m.codigo === 'AG27-1D-01'), p1 = j.modelos.find(m => m.codigo === 'PL27-01');
+  assert.deepEqual([d1.nome, d1.paginas.length, d1.secoes.at(-1), d1.anos, d1.tamanhos, d1.produtos.map(p => p.id)], ['Um dia por página com horários', 15, 'Um dia por página com horários', [{ ano: '2027', disp: true }], [], ['prd_agenda', 'prd_planner', 'prd_caderno']]);
+  assert.equal(p1.paginas.length, 16); assert.equal(d1.paginas[0].src, p1.paginas[0].src);   // a mesma imagem serve aos dois modelos
+  const img = await fetch(X.base + d1.galeria[0].src); assert.equal(img.status, 200); assert.equal(img.headers.get('content-type'), 'image/jpeg');
+  assert.ok(Number(img.headers.get('content-length')) < 150000);   // prévia reduzida, não o arquivo de impressão
+});

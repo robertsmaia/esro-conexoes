@@ -6,6 +6,7 @@ import { createApp } from './app.js';
 import { refreshInstagramToken } from './channels.js';
 import { SEED_PRODUCTS, slugify } from './shop.js';
 import { migratePrices } from './precos.js';
+import { importAgenda2027 } from './miolos-agenda2027.js';
 
 const cfg = loadConfig();
 const missing = ['DATABASE_URL', 'MCP_SECRET'].filter(k => !process.env[k]);
@@ -33,6 +34,7 @@ if (await repo.docCount('catalog') === 0) {
 if (await repo.docCount('products') === 0) { for (const p of SEED_PRODUCTS) await repo.docSet('products', p.id, p.data); console.log(`[loja] produtos iniciais gravados (${SEED_PRODUCTS.length})`); }
 // Política de preços de outubro de 2026 (uma vez só): preço fixo nos físicos, catálogo sem faixas, "Material pronto" desligado e texto de prazo. Não mexe em pedidos.
 await migratePrices(repo, slugify).catch(e => console.error('[preços] migração não aplicada:', e?.message || e));
+await importAgenda2027(repo).catch(e => console.error('[miolos] Agenda 2027 não cadastrada:', e?.message || e));   // uma vez só
 if (cfg.mercadopago.token && !cfg.mercadopago.secret) console.warn('[segurança] MP_WEBHOOK_SECRET não definido: os avisos do Mercado Pago são aceitos sem conferir a assinatura (o pagamento é sempre consultado direto no Mercado Pago).');
 if ((cfg.mercadopago.token || cfg.mail.key) && !cfg.publicUrl) console.warn('[loja] defina PUBLIC_URL (ex.: https://www.esro-papelaria.com.br) para os links dos e-mails e o retorno do pagamento usarem o endereço certo.');
 if (!cfg.panel.password) console.warn('[painel] PAINEL_SENHA não definida: o painel em /painel fica desativado até você cadastrar a senha no Render.');

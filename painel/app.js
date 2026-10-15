@@ -2387,7 +2387,13 @@ async function mioUploadMany(files,st,max,into,label){
   return n;
 }
 var mioIds=p=>p?[p.f,p.t].filter(Boolean):[];
-async function mioDeleteAssets(ids){ if(!ASSETS) return; for(const id of new Set(ids)){ try{ await ASSETS.delete(id); }catch(_){} } }
+// Apaga imagens que saíram de um modelo, menos as que outro modelo, categoria ou produto ainda usa (várias páginas são comuns a vários modelos).
+function mioInUse(skip){ const u=new Set(); const add=p=>{ for(const x of mioIds(p)) u.add(x); };
+  for(const m of D.miolos){ if(m.id===skip) continue; [...(m.galeria||[]),...(m.paginas||[]),...(m.cores||[]).flatMap(c=>c.imgs||[])].forEach(add); if(m.demo) u.add(m.demo); (m.producao||[]).forEach(p=>u.add(p.id)); }
+  for(const c of D.miolocats){ if(c.id!==skip) add(c.img); }
+  for(const p of D.products) for(const i of p.imgs||[]){ const k=/^asset:([a-f0-9]{24})$/.exec(String(i)); if(k) u.add(k[1]); }
+  return u; }
+async function mioDeleteAssets(ids,skip){ if(!ASSETS) return; const used=mioInUse(skip); for(const id of new Set(ids)){ if(used.has(id)) continue; try{ await ASSETS.delete(id); }catch(_){} } }
 function mioDiscard(){ for(const st of [MIOC,MIOM]) if(st&&!st.saved&&st.fresh.length) mioDeleteAssets(st.fresh); MIOC=MIOM=null; }   // enviou e cancelou: apaga o que não foi salvo
 
 /* --- tela --- */
@@ -2441,7 +2447,7 @@ async function saveMioCat(id){
   if(D.miolocats.some(c=>c.id!==id&&String(c.nome).toLowerCase()===nome.toLowerCase())){ $('#mc-nome').focus(); toast('Já existe uma categoria com esse nome',1); return; }
   const now=new Date().toISOString(), data={nome,desc:$('#mc-desc').value.trim(),img:MIOC.img||null,ord:parseInt($('#mc-ord').value)||0,on:$('#mc-on').checked,updatedAt:now};
   const ok=id?await write(()=>DB.doc('miolocats/'+id).update(data),'Categoria salva'):await (async()=>{ const ref=DB.collection('miolocats').doc(); return write(()=>DB.doc('miolocats/mc_'+ref.id).set({...data,at:now}),'Categoria criada'); })();
-  if(!ok) return; MIOC.saved=true; const keep=new Set(mioIds(MIOC.img)); mioDeleteAssets(MIOC.old.filter(x=>!keep.has(x))); logAct(id?'Categoria de miolo alterada':'Categoria de miolo criada',nome); MIOC=null; closeModal();
+  if(!ok) return; MIOC.saved=true; const keep=new Set(mioIds(MIOC.img)); mioDeleteAssets(MIOC.old.filter(x=>!keep.has(x)),id); logAct(id?'Categoria de miolo alterada':'Categoria de miolo criada',nome); MIOC=null; closeModal();
 }
 
 /* --- modelo --- */
@@ -2540,7 +2546,7 @@ async function saveMioModel(id){
   const ok=id?await write(()=>DB.doc('miolos/'+id).update(data),'Modelo salvo'):await (async()=>{ const ref=DB.collection('miolos').doc(); return write(()=>DB.doc('miolos/mm_'+ref.id).set({...data,at:now}),'Modelo cadastrado'); })();
   if(!ok) return; MIOM.saved=true;
   const keep=new Set([...data.galeria,...data.paginas,...cores.flatMap(c=>c.imgs)].flatMap(mioIds).concat(data.demo?[data.demo]:[],data.producao.map(p=>p.id)));
-  mioDeleteAssets(MIOM.old.filter(x=>!keep.has(x))); logAct(id?'Modelo de miolo alterado':'Modelo de miolo cadastrado',`${codigo} · ${nome}`); MIOM=null; closeModal();
+  mioDeleteAssets(MIOM.old.filter(x=>!keep.has(x)),id); logAct(id?'Modelo de miolo alterado':'Modelo de miolo cadastrado',`${codigo} · ${nome}`); MIOM=null; closeModal();
 }
 
 /* --- cliques e arquivos --- */
@@ -2550,12 +2556,12 @@ async function mioClick(el,d){
   if(d.mcsave!==undefined){ saveMioCat(d.mcsave||null); return true; }
   if(d.mcdel){ const n=D.miolos.filter(m=>m.cat===d.mcdel).length; if(n){ toast(`Esta categoria tem ${n} modelo(s). Mova ou exclua os modelos antes.`,1); return true; }
     if(delArm!==d.mcdel){ delArm=d.mcdel; el.innerHTML='<i data-lucide="alert-triangle"></i>Confirmar exclusão'; icons(); return true; }
-    const c=D.miolocats.find(x=>x.id===d.mcdel); if(await write(()=>DB.doc('miolocats/'+d.mcdel).delete(),'Categoria excluída')){ mioDeleteAssets([...(MIOC?MIOC.old:[]),...(MIOC?MIOC.fresh:[])]); MIOC=null; logAct('Categoria de miolo excluída',c?.nome||''); closeModal(); } return true; }
+    const c=D.miolocats.find(x=>x.id===d.mcdel); if(await write(()=>DB.doc('miolocats/'+d.mcdel).delete(),'Categoria excluída')){ mioDeleteAssets([...(MIOC?MIOC.old:[]),...(MIOC?MIOC.fresh:[])],d.mcdel); MIOC=null; logAct('Categoria de miolo excluída',c?.nome||''); closeModal(); } return true; }
   if(d.mmnew!==undefined){ openMioModel(null); return true; }
   if(d.mmedit){ openMioModel(d.mmedit); return true; }
   if(d.mmsave!==undefined){ saveMioModel(d.mmsave||null); return true; }
   if(d.mmdel){ if(delArm!==d.mmdel){ delArm=d.mmdel; el.innerHTML='<i data-lucide="alert-triangle"></i>Confirmar exclusão'; icons(); return true; }
-    const m=D.miolos.find(x=>x.id===d.mmdel); if(await write(()=>DB.doc('miolos/'+d.mmdel).delete(),'Modelo excluído')){ mioDeleteAssets([...(MIOM?MIOM.old:[]),...(MIOM?MIOM.fresh:[])]); MIOM=null; logAct('Modelo de miolo excluído',m?`${m.codigo} · ${m.nome}`:''); closeModal(); } return true; }
+    const m=D.miolos.find(x=>x.id===d.mmdel); if(await write(()=>DB.doc('miolos/'+d.mmdel).delete(),'Modelo excluído')){ mioDeleteAssets([...(MIOM?MIOM.old:[]),...(MIOM?MIOM.fresh:[])],d.mmdel); MIOM=null; logAct('Modelo de miolo excluído',m?`${m.codigo} · ${m.nome}`:''); closeModal(); } return true; }
   if(d.mmcoradd!==undefined){ mioSyncCores(); if(MIOM.cores.length>=24){ toast('Até 24 cores por modelo',1); return true; } MIOM.cores.push({nome:'',hex:'#e7b5a2',disp:true,imgs:[]}); mioRedraw('cores'); document.querySelector(`[data-mmcor="${MIOM.cores.length-1}:nome"]`)?.focus(); return true; }
   if(d.mmcordel!==undefined){ mioSyncCores(); MIOM.cores.splice(+d.mmcordel,1); mioRedraw('cores'); return true; }
   if(d.miodel){ const [kind,i]=d.miodel.split(':'); if(kind.startsWith('cor')) mioSyncCores(); const L=mioListOf(kind), l=L.list.slice(); l.splice(+i,1); L.set(l); return true; }
