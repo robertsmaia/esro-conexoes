@@ -117,5 +117,8 @@ export function makeMiolos({ cfg, repo, log = console }) {
     app.get('/miolos/demo/:id', serve('pdf', { 'Content-Disposition': 'inline; filename="miolo-demonstracao.pdf"', 'X-Robots-Tag': 'noindex' }));
   }
 
-  return { load, validar, mount, invalidate: () => { cache = { at: 0 }; } };
+  // O produto tem miolo para escolher? Então o pedido precisa dizer qual.
+  const exigido = (snap, productId) => snap.modelos.some(m => m.disponivel && m.produtos.some(p => p.id === productId));
+
+  return { load, validar, exigido, mount, invalidate: () => { cache = { at: 0 }; } };
 }

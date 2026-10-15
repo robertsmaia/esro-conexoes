@@ -579,10 +579,11 @@ test('Miolos: o site só vê modelos publicados de categorias com modelo dispon�
   await err({ codigo: 'AG1D-01', cor: 'Rosa', tamanho: 'A3', ano: '2027' }, /tamanho/);
   await err({ codigo: 'AG1D-01', cor: 'Rosa', tamanho: 'A5' }, /ano/);
   await err({ codigo: 'AG1D-01', cor: 'Rosa', tamanho: 'A5', ano: '2027' }, /não é usado neste produto/, { id: 'prd_caderno', pers: '' });
-  const ok = await buy([it({ codigo: 'ag1d-01', cor: 'rosa', tamanho: 'A5', ano: '2027' }), { id: 'prd_agenda27', qtd: 1, vars: {}, pers: 'Bia' }]);
+  const sem = await buy([{ id: 'prd_agenda27', qtd: 1, vars: {}, pers: 'Bia' }]); assert.equal(sem.status, 422); assert.match((await sem.json()).erro, /Escolha o miolo/);   // produto com miolo: escolher é obrigatório
+  const ok = await buy([it({ codigo: 'ag1d-01', cor: 'rosa', tamanho: 'A5', ano: '2027' }), it({ codigo: 'AG1D-01', cor: 'Rosa', tamanho: 'A5', ano: '2027' }, { pers: 'Bia' })]);
   assert.equal(ok.status, 201);
   const o = (await X.repo.orderByPub((await ok.json()).acompanhar.split('/').pop())).data;
-  assert.deepEqual(o.loja.itens.map(i => [i.vars, i.unit]), [[[['Modelo do miolo', 'AG1D-01 Floral · Rosa · A5 · 2027']], 59.9], [[], 59.9]]);
+  assert.deepEqual(o.loja.itens.map(i => [i.vars, i.unit]), [[[['Modelo do miolo', 'AG1D-01 Floral · Rosa · A5 · 2027']], 59.9], [[['Modelo do miolo', 'AG1D-01 Floral · Rosa · A5 · 2027']], 59.9]]);
   assert.match(o.note || '', /Modelo do miolo: AG1D-01 Floral · Rosa · A5 · 2027/);
 });
 

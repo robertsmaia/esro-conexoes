@@ -6,7 +6,7 @@
   var el = function (tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   var Cart = window.ESROCart, WA = 'https://wa.me/5511992481676';
   var slug = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
-  var p = null, qtd = 1, order = Cart.load(), miolo = null, MKEY = 'esro_miolo';
+  var p = null, qtd = 1, order = Cart.load();
   var PROD = 'A produção começa após a confirmação do pagamento via PIX ou do sinal de 50%.';
 
   // Contagem de visitas (sem cookies): registra só que uma página de produto foi aberta.
@@ -75,52 +75,113 @@
     showPrice();
   }
 
-  /* Miolo: produtos com modelos no catálogo "Escolha seu miolo" mostram a escolha (ou o convite para escolher). */
-  var norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim(); };
-  function stillOk(m, s) {   // a escolha guardada ainda vale? (modelo disponível e opções ainda liberadas)
-    if (!m || !m.disponivel) return false;
-    var has = function (list, v, f) { return !list.length ? !v : list.some(function (x) { return x.disp && norm(x[f]) === norm(v); }); };
-    if (!has(m.cores, s.cor, 'nome') || !has(m.tamanhos, s.tamanho, 'nome') || !has(m.anos, s.ano, 'ano')) return false;
-    return !m.bloqueios.some(function (b) { return (!b[0] || norm(b[0]) === norm(s.cor)) && (!b[1] || norm(b[1]) === norm(s.tamanho)) && (!b[2] || norm(b[2]) === norm(s.ano)); });
+  /* Miolo: agenda, planner, caderno… mostram aqui mesmo os modelos de miolo ligados ao produto no painel.
+     A cliente escolhe o modelo, a cor, o tamanho e o ano e pode folhear o miolo completo sem sair da página. */
+  var norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); };
+  var MIO = { list: [], cats: [], cat: '', m: null, cor: '', tam: '', ano: '' };
+  var blockedM = function (m, c, t, y) { return m.bloqueios.some(function (b) { return (!b[0] || norm(b[0]) === norm(c)) && (!b[1] || norm(b[1]) === norm(t)) && (!b[2] || norm(b[2]) === norm(y)); }); };
+  function optOk(kind, v) {   // a opção combina com o que já foi escolhido? (combinações indisponíveis do cadastro)
+    var m = MIO.m; if (!m.bloqueios.length) return true;
+    var av = function (list, f) { var a = list.filter(function (x) { return x.disp; }).map(function (x) { return x[f]; }); return a.length ? a : ['']; };
+    var cs = kind === 'cor' ? [v] : MIO.cor ? [MIO.cor] : av(m.cores, 'nome'), ts = kind === 'tam' ? [v] : MIO.tam ? [MIO.tam] : av(m.tamanhos, 'nome'), ys = kind === 'ano' ? [v] : MIO.ano ? [MIO.ano] : av(m.anos, 'ano');
+    return cs.some(function (a) { return ts.some(function (b) { return ys.some(function (d) { return !blockedM(m, a, b, d); }); }); });
+  }
+  function firstPicM(m) { var c = MIO.cor && m.cores.filter(function (x) { return norm(x.nome) === norm(MIO.cor); })[0]; return (c && c.imgs[0]) || m.galeria[0] || (m.cores.filter(function (x) { return x.imgs.length; })[0] || { imgs: [] }).imgs[0] || m.paginas[0] || null; }
+  function pickModel(m, keep) {
+    MIO.m = m; if (m) MIO.cat = m.cat;
+    if (!keep) { MIO.cor = MIO.tam = MIO.ano = ''; }
+    if (m) [['cor', m.cores, 'nome'], ['tam', m.tamanhos, 'nome'], ['ano', m.anos, 'ano']].forEach(function (g) {
+      if (MIO[g[0]] && !g[1].some(function (x) { return x.disp && norm(x[g[2]]) === norm(MIO[g[0]]); })) MIO[g[0]] = '';
+      var av = g[1].filter(function (x) { return x.disp; }); if (!MIO[g[0]] && av.length === 1) MIO[g[0]] = av[0][g[2]];
+    });
   }
   function loadMiolos() {
     fetch('/api/miolos', { headers: { 'X-ESRO': '1' } }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d) return;
-      if (d.categorias.length) $('#navMiolos').hidden = false;
-      var mine = d.modelos.filter(function (m) { return m.produtos.some(function (x) { return x.id === p.id; }); });
-      if (!mine.length) return;
-      var saved = null; try { saved = JSON.parse(localStorage.getItem(MKEY) || 'null'); } catch (_) { }
-      var m = saved && mine.filter(function (x) { return x.codigo === saved.codigo; })[0];
-      miolo = m && stillOk(m, saved) ? saved : null;
-      drawMiolo(saved && !miolo && m ? 'O miolo escolhido antes não está mais disponível com essas opções. Escolha de novo.' : '');
+      MIO.list = d.modelos.filter(function (m) { return m.produtos.some(function (x) { return x.id === p.id; }); });
+      if (!MIO.list.length) return;
+      var names = {}; d.categorias.forEach(function (c) { names[c.id] = c.nome; });
+      MIO.cats = []; MIO.list.forEach(function (m) { if (!MIO.cats.some(function (c) { return c.id === m.cat; })) MIO.cats.push({ id: m.cat, nome: names[m.cat] || 'Outros modelos' }); });
+      // Escolha que já veio do catálogo de miolos (ou de uma visita anterior), se ainda valer para este produto.
+      var saved = null; try { saved = JSON.parse(localStorage.getItem('esro_miolo') || 'null'); } catch (_) { }
+      var want = new URLSearchParams(location.search).get('miolo') || (saved && saved.codigo) || '';
+      var m = MIO.list.filter(function (x) { return x.codigo === String(want).toUpperCase() && x.disponivel; })[0];
+      if (m) { MIO.cor = saved && saved.codigo === m.codigo ? saved.cor : ''; MIO.tam = saved && saved.codigo === m.codigo ? saved.tamanho : ''; MIO.ano = saved && saved.codigo === m.codigo ? saved.ano : ''; pickModel(m, true); }
+      else MIO.cat = MIO.cats[0].id;
+      drawMiolo();
     }).catch(function () { });
   }
-  function drawMiolo(warn) {
-    var box = $('#pdMiolo'), to = '/miolos?produto=' + encodeURIComponent(p.slug); box.textContent = ''; box.hidden = false;
-    var h = el('p', 'pd-miolo-t', 'Miolo (páginas internas)'); h.id = 'pdMioloT'; box.appendChild(h);
-    if (miolo) {
-      var row = el('div', 'pd-miolo-row');
-      if (/^\/miolos\/img\/[a-f0-9]{24}$/.test(miolo.thumb || '')) { var im = document.createElement('img'); im.src = miolo.thumb; im.alt = ''; row.appendChild(im); }
-      var t = el('div'); t.appendChild(el('b', null, miolo.rotulo || miolo.codigo)); var links = el('span', 'pd-miolo-links');
-      var a = el('a', null, 'Trocar'); a.href = to; links.appendChild(a);
-      var rm = el('button', 'linkish', 'Remover'); rm.type = 'button'; rm.addEventListener('click', function () { miolo = null; try { localStorage.removeItem(MKEY); } catch (_) { } drawMiolo(''); });
-      links.appendChild(rm); t.appendChild(links); row.appendChild(t); box.appendChild(row);
-    } else {
-      box.appendChild(el('p', 'pd-miolo-txt', 'Veja as páginas por dentro e escolha o modelo, a cor e o tamanho do miolo.'));
-      var go = el('a', 'btn secondary small', 'Escolher o miolo →'); go.href = to; box.appendChild(go);
-      box.appendChild(el('small', 'pd-miolo-opt', 'Opcional: se preferir, a ESRO combina o miolo com você depois do pedido.'));
+  function mioErr(t) { var b = $('#pdMioloMsg'); if (!b) return; b.textContent = t || ''; b.hidden = !t; }
+  function drawMiolo() {
+    var box = $('#pdMiolo'), m = MIO.m; box.textContent = ''; box.hidden = false;
+    var h = el('p', 'pd-miolo-t', 'Escolha o miolo'); h.id = 'pdMioloT'; box.appendChild(h);
+    box.appendChild(el('p', 'pd-miolo-txt', 'As páginas de dentro: toque em um modelo para ver as opções e folhear o miolo completo.'));
+    if (MIO.cats.length > 1) {
+      var tabs = el('div', 'pd-mtabs'); tabs.setAttribute('role', 'group'); tabs.setAttribute('aria-label', 'Tipo de miolo');
+      MIO.cats.forEach(function (c) { var b = el('button', 'pd-mtab', c.nome); b.type = 'button'; b.setAttribute('aria-pressed', String(MIO.cat === c.id));
+        b.addEventListener('click', function () { MIO.cat = c.id; if (MIO.m && MIO.m.cat !== c.id) pickModel(null); drawMiolo(); }); tabs.appendChild(b); });
+      box.appendChild(tabs);
     }
-    if (warn) box.appendChild(el('p', 'msg bad', warn));
+    var grid = el('div', 'pd-mgrid'); grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-labelledby', 'pdMioloT');
+    MIO.list.filter(function (x) { return x.cat === MIO.cat; }).forEach(function (x) {
+      var b = el('button', 'pd-mcard'); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(m === x)); b.disabled = !x.disponivel;
+      var pic = x.galeria[0] || (x.cores.filter(function (c) { return c.imgs.length; })[0] || { imgs: [] }).imgs[0] || x.paginas[0];
+      var fig = el('span', 'pd-mimg'); if (pic) { var im = document.createElement('img'); im.src = pic.thumb; im.alt = ''; im.loading = 'lazy'; fig.appendChild(im); } fig.setAttribute('aria-hidden', 'true'); b.appendChild(fig);
+      b.appendChild(el('span', 'pd-mcode', x.codigo)); b.appendChild(el('span', 'pd-mname', x.nome)); if (!x.disponivel) b.appendChild(el('span', 'pd-moff', 'Indisponível'));
+      b.addEventListener('click', function () { pickModel(x); mioErr(''); drawMiolo(); var d = $('#pdMDet'); if (d) d.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
+      grid.appendChild(b);
+    });
+    box.appendChild(grid);
+    if (m) {
+      var det = el('div', 'pd-mdet'); det.id = 'pdMDet';
+      det.appendChild(el('b', null, m.codigo + ' · ' + m.nome));
+      var first = String(m.desc || '').split('\n')[0]; if (first) det.appendChild(el('p', 'pd-mdesc', first));
+      [['cor', 'Cor', m.cores, 'nome', true], ['tam', 'Tamanho', m.tamanhos, 'nome'], ['ano', 'Ano', m.anos, 'ano']].forEach(function (g) {
+        if (!g[2].length) return;
+        var fs = el('fieldset', 'opt'), wrap = el('div', g[4] ? 'sw' : 'chips'); fs.appendChild(el('legend', null, g[1]));
+        g[2].forEach(function (it) {
+          var lab = el('label'), inp = document.createElement('input'); inp.type = 'radio'; inp.name = 'pdm-' + g[0]; inp.value = it[g[3]];
+          var ok = it.disp && optOk(g[0], it[g[3]]); inp.disabled = !ok; inp.checked = ok && norm(MIO[g[0]]) === norm(it[g[3]]); lab.appendChild(inp);
+          if (g[4]) { var ball = el('span', 'ball'); ball.style.background = it.hex || '#ddd'; lab.appendChild(ball); lab.appendChild(el('span', null, it.nome)); }
+          else { var sp = el('span', null, it[g[3]]); if (it.medida) sp.appendChild(el('small', null, ' · ' + it.medida)); lab.appendChild(sp); }
+          if (!ok) { lab.title = it.disp ? 'Não disponível com a escolha atual' : 'Indisponível'; lab.appendChild(el('span', 'sr', it.disp ? ' (não disponível com a escolha atual)' : ' (indisponível)')); }
+          inp.addEventListener('change', function () { MIO[g[0]] = it[g[3]]; mioErr(''); drawMiolo(); });
+          wrap.appendChild(lab);
+        });
+        fs.appendChild(wrap); if (g[0] === 'cor') fs.appendChild(el('p', 'ml-small', 'As cores podem variar conforme a tela e a impressão.')); det.appendChild(fs);
+      });
+      var acts = el('div', 'pd-macts');
+      if (m.paginas.length) { var ver = el('button', 'btn secondary small', 'Ver miolo completo (' + m.paginas.length + (m.paginas.length === 1 ? ' página)' : ' páginas)')); ver.type = 'button'; ver.id = 'pdMVer';
+        ver.addEventListener('click', function () { window.ESROViewer.open(m.paginas, 0, m.nome + ' · miolo completo', ver); }); acts.appendChild(ver); }
+      else if (m.galeria.length) { var vg = el('button', 'btn secondary small', 'Ver prévias'); vg.type = 'button'; vg.addEventListener('click', function () { window.ESROViewer.open(m.galeria, 0, m.nome, vg); }); acts.appendChild(vg); }
+      if (m.demo) { var pdf = el('a', 'linkish', 'PDF de demonstração'); pdf.href = m.demo; pdf.target = '_blank'; pdf.rel = 'noopener'; acts.appendChild(pdf); }
+      det.appendChild(acts);
+      if (m.secoes.length) { var dt = el('details', 'pd-msecs'), sm = el('summary', null, 'O que tem dentro (' + m.secoes.length + ')'); dt.appendChild(sm); var ul = el('ul', 'ml-secs'); m.secoes.forEach(function (x) { ul.appendChild(el('li', null, x)); }); dt.appendChild(ul); det.appendChild(dt); }
+      box.appendChild(det);
+    }
+    var msg = el('p', 'msg bad'); msg.id = 'pdMioloMsg'; msg.setAttribute('role', 'alert'); msg.hidden = true; box.appendChild(msg);
+  }
+  // Para o carrinho: o miolo escolhido (ou o que falta escolher).
+  function mioChoice() {
+    if (!MIO.list.some(function (x) { return x.disponivel; })) return { ok: true, value: null };
+    var m = MIO.m; if (!m) return { erro: 'Escolha o miolo antes de adicionar ao pedido.' };
+    var miss = m.cores.length && !MIO.cor ? 'a cor' : m.tamanhos.length && !MIO.tam ? 'o tamanho' : m.anos.length && !MIO.ano ? 'o ano' : '';
+    if (miss) return { erro: 'Escolha ' + miss + ' do miolo.' };
+    var rot = [m.codigo + ' ' + m.nome, MIO.cor, MIO.tam, MIO.ano].filter(Boolean).join(' · '), pic = firstPicM(m);
+    var v = { codigo: m.codigo, cor: MIO.cor, tamanho: MIO.tam, ano: MIO.ano, rotulo: rot };
+    try { localStorage.setItem('esro_miolo', JSON.stringify(Object.assign({ nome: m.nome, thumb: pic ? pic.thumb : '', produtos: m.produtos.map(function (x) { return x.id; }), at: Date.now() }, v, { tamanho: MIO.tam }))); } catch (_) { }
+    return { ok: true, value: v };
   }
 
   function addToCart() {
     $('#pdMsg').hidden = true;
+    var mc = mioChoice(); if (mc.erro) { mioErr(mc.erro); $('#pdMiolo').scrollIntoView({ block: 'start', behavior: 'smooth' }); return false; }
     var c = chosen(); if (c.missing) { fail('Escolha uma opção de "' + c.missing + '".'); return false; }
     var pers = $('#pd-pers').value.trim();
     if (p.personalizacao && !pers) { var box = $('#pd-pers-err'); box.textContent = 'Preencha este campo para a ESRO personalizar o produto.'; box.hidden = false; $('#pd-pers').setAttribute('aria-invalid', 'true'); $('#pd-pers').focus(); return false; }
     order = Cart.load();
     var ok = Cart.add(order, { nome: p.nome, qtd: qtd, img: p.imagens[0] || '', id: p.id, tipo: p.modo, vars: c.vars, pers: pers, preco: p.modo === 'compra' ? Math.round((p.preco + c.add) * 100) / 100 : 0, slug: p.slug,
-      base: p.modo === 'compra' ? p.preco : 0, add: c.add, faixas: p.faixasQtd || [], miolo: miolo ? { codigo: miolo.codigo, cor: miolo.cor, tamanho: miolo.tamanho, ano: miolo.ano, rotulo: miolo.rotulo } : null });
+      base: p.modo === 'compra' ? p.preco : 0, add: c.add, faixas: p.faixasQtd || [], miolo: mc.value });
     Cart.reprice(order);
     if (!ok) { fail('O pedido pode ter até 20 itens diferentes.'); return false; }
     Cart.save(order); count(); track('carrinho'); return true;

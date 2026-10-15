@@ -130,6 +130,7 @@ export function makeShop({ cfg, repo, log = console, clientIp, counter, accounts
       if (p.pers && !pers) return { erro: `Preencha "${p.pers}" em "${p.name}".`, campo: 'itens' };
       // Miolo escolhido no catálogo de miolos: confere de novo aqui e entra no pedido como mais uma opção do item.
       if (it?.miolo) { const mv = msnap && miolos ? miolos.validar(msnap, p.id, it.miolo) : { erro: 'Não foi possível conferir o miolo escolhido. Tente de novo.' }; if (mv?.erro) return { erro: mv.erro, campo: 'itens' }; if (mv) vars.push(['Modelo do miolo', mv.rotulo]); }
+      else if (msnap && miolos?.exigido(msnap, p.id)) return { erro: `Escolha o miolo de "${p.name}" na página do produto.`, campo: 'itens' };
       qtyBy[p.id] = (qtyBy[p.id] || 0) + qtd;
       if (p.stock !== null && qtyBy[p.id] > p.stock) return { erro: p.stock > 0 ? `Só restam ${p.stock} unidade(s) de "${p.name}".` : `"${p.name}" está esgotado no momento.`, campo: 'itens', status: 409 };
       lines.push({ p, qtd, vars, pers, add, custo });

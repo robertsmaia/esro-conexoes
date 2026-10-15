@@ -1,4 +1,4 @@
-# ESRO — Loja online: passo a passo de cada recurso (versão 1.6.1)
+# ESRO — Loja online: passo a passo de cada recurso (versão 1.6.2)
 
 Este guia mostra como usar cada recurso novo do site e do painel. Está na ordem em que vale a pena fazer.
 
@@ -23,7 +23,7 @@ Este guia mostra como usar cada recurso novo do site e do painel. Está na ordem
 
 ---
 
-## 0. Antes de tudo: publicar a versão 1.6.1
+## 0. Antes de tudo: publicar a versão 1.6.2
 
 1. Abra o GitHub no repositório `esro-conexoes` → **Add file → Upload files**.
 2. Envie o arquivo **`esro-pacote.tgz`** que está na pasta `Site Esro` do computador e clique em **Commit changes**.
@@ -344,6 +344,9 @@ Página nova do site, **/miolos**: o cliente vê as categorias (“Como você qu
 - **Publicado no site**, **Destaque** (aparece primeiro) e **Indisponível no momento** (aparece com o aviso, mas não dá para escolher).
 
 As imagens são reduzidas no navegador antes de enviar (grande de até 1600 px e miniatura de até 420 px). Se você enviar imagens e cancelar sem salvar, elas são apagadas.
+
+### A escolha do miolo fica dentro do produto (versão 1.6.2)
+Na página da agenda, do planner e do caderno (os produtos marcados em “Produtos que usam este miolo”), aparece o quadro **Escolha o miolo**: abas por tipo (1 dia por página, 2 dias, Planners), os modelos com miniatura, e, ao tocar em um, a cor, o tamanho, o ano, “Ver miolo completo” (o visualizador abre ali mesmo) e “O que tem dentro”. **Nesses produtos, escolher o miolo é obrigatório** para adicionar ao pedido, e o servidor confere. Para deixar um produto sem escolha de miolo, desmarque-o nos modelos. O link “Escolha seu miolo” saiu do menu; a página /miolos continua funcionando para quem tiver o link.
 
 ### Miolos da Agenda 2027 (versão 1.6.1)
 No primeiro deploy da 1.6.1, o servidor cadastra sozinho (uma vez só) os miolos da Agenda 2027 enviados em 15/10: 3 categorias (1 dia por página, 2 dias por página, Planners) e 10 modelos (AG27-1D-01 a 04, AG27-2D-01, PL27-01 a 05), todos com as 14 páginas comuns (folha de rosto a rastreador de hábitos) mais as páginas próprias, ano 2027, cor Rosé floral, ligados à Agenda, ao Planner e ao Caderno, **sem tamanho** (complete no painel). Os planners incluem a página de cardápio e lista de compras. As imagens do site são prévias reduzidas com marca d'água; os PNGs originais (arquivos de impressão) não foram enviados ao site. Tudo pode ser editado ou despublicado em **Loja online → Miolos**. Excluir um modelo não apaga as páginas que outros modelos também usam.

@@ -219,7 +219,7 @@ export function makeTools({ cfg, repo, fetchImpl = fetch }) {
 }
 
 export function buildMcp(tools) {
-  const s = new McpServer({ name: 'esro-conexoes', version: '1.6.1' });
+  const s = new McpServer({ name: 'esro-conexoes', version: '1.6.2' });
   for (const [name, t] of Object.entries(tools)) {
     s.registerTool(name, { title: t.title, description: t.description, inputSchema: t.input, annotations: t.annotations }, async (args) => {
       try { return { content: [{ type: 'text', text: JSON.stringify(await t.run(args || {})) }] }; }
