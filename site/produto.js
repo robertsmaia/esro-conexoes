@@ -71,7 +71,7 @@
     $('#pdAdd').textContent = p.modo === 'compra' ? 'Adicionar ao pedido' : 'Adicionar ao pedido de orçamento';
     var note = $('#pdNote'); note.textContent = '';
     if (!canAdd) { note.appendChild(document.createTextNode('Quer ser avisada quando voltar? ')); var a = el('a', null, 'Fale com a ESRO pelo WhatsApp'); a.href = WA + '?text=' + encodeURIComponent('Olá, ESRO! Quero saber quando volta o produto ' + p.nome + '.'); a.target = '_blank'; a.rel = 'noopener noreferrer'; note.appendChild(a); note.appendChild(document.createTextNode('.')); }
-    else note.textContent = p.modo === 'compra' ? (p.digital ? 'Produto digital: a entrega é feita por e-mail ou WhatsApp.' : 'O frete é calculado pelo CEP na finalização da compra. ' + PROD) : 'Este item é feito sob orçamento: você envia o pedido e a ESRO confirma o valor e o prazo pelo WhatsApp.' + (p.digital ? '' : ' ' + PROD);
+    else note.textContent = p.modo === 'compra' ? (p.digital ? 'Produto digital: a entrega é feita por e-mail ou WhatsApp.' : 'O frete é calculado pelo CEP na finalização da compra.' + (p.personalizacao ? ' ' + PROD : '')) : 'Este item é feito sob orçamento: você envia o pedido e a ESRO confirma o valor e o prazo pelo WhatsApp.' + (p.digital ? '' : ' ' + PROD);
     showPrice();
   }
 

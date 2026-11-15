@@ -189,10 +189,40 @@
     else { var b = el('button', 'add', '+'); b.type = 'button'; b.setAttribute('data-name', p.nome); b.setAttribute('data-id', p.id); b.setAttribute('data-img', p.imagens[0] || ''); b.setAttribute('aria-label', 'Adicionar ' + p.nome); price.appendChild(b); }
     body.appendChild(price); art.appendChild(link); art.appendChild(body); return art;
   }
+  /* Vitrine com muitos produtos: filtro por categoria e "ver todos". */
+  var VIT_INICIO = 12, vitFiltrar = null;
+  function vitrineFiltros(grid, shown) {
+    var box = $('#vitFiltros'); if (!box) return;
+    var cats = []; shown.forEach(function (p) { if (p.categoria && cats.indexOf(p.categoria) < 0) cats.push(p.categoria); });
+    var more = el('button', 'btn secondary vit-mais'); more.type = 'button'; grid.parentNode.insertBefore(more, grid.nextSibling);
+    var atual = '', todos = false;
+    function aplicar() {
+      var n = 0;
+      Array.prototype.forEach.call(grid.children, function (c) { var ok = !atual || c.getAttribute('data-cat') === atual; if (ok) n++; c.hidden = !ok || (!atual && !todos && n > VIT_INICIO); });
+      Array.prototype.forEach.call(box.children, function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-cat') === atual)); });
+      more.hidden = !!atual || todos || shown.length <= VIT_INICIO; more.textContent = 'Ver todos os ' + shown.length + ' produtos';
+    }
+    vitFiltrar = function (cat) { atual = cats.indexOf(cat) >= 0 ? cat : ''; todos = false; aplicar(); };
+    if (cats.length > 1) {
+      [''].concat(cats).forEach(function (c) {
+        var n = c ? shown.filter(function (p) { return p.categoria === c; }).length : shown.length;
+        var b = el('button', null, c || 'Todos'); b.type = 'button'; b.setAttribute('data-cat', c); b.appendChild(el('small', null, ' ' + n));
+        b.addEventListener('click', function () { atual = c; todos = false; aplicar(); }); box.appendChild(b);
+      });
+      box.hidden = false;
+    }
+    more.addEventListener('click', function () { todos = true; aplicar(); var first = grid.children[VIT_INICIO]; if (first) { var l = first.querySelector('a'); if (l) l.focus(); } });
+    aplicar();
+  }
+  // Links "Ver kits de Natal", "Ver planners": abrem a vitrine já filtrada.
+  document.addEventListener('click', function (ev) {
+    var a = ev.target.closest && ev.target.closest('[data-filtro]'); if (!a || !vitFiltrar) return;
+    vitFiltrar(a.getAttribute('data-filtro'));
+  });
   if (Cart) fetch('/api/produtos', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
     if (!d || !Array.isArray(d.produtos)) return; products = d.produtos;
     var grid = $('#kits .product-grid'), shown = products.filter(function (p) { return p.vitrine; });
-    if (grid && shown.length) { grid.textContent = ''; shown.forEach(function (p) { grid.appendChild(productCard(p)); }); grid.setAttribute('data-live', '1'); }
+    if (grid && shown.length) { grid.textContent = ''; shown.forEach(function (p) { var c = productCard(p); c.setAttribute('data-cat', p.categoria || ''); grid.appendChild(c); }); grid.setAttribute('data-live', '1'); vitrineFiltros(grid, shown); }
     // Carrinho guardado: atualiza preço e tira o que saiu da loja.
     order = order.filter(function (i) { if (!i.id) return true; var p = products.filter(function (x) { return x.id === i.id; })[0]; if (!p) return false; i.tipo = p.modo; if (p.modo === 'compra') { var add = 0; p.variacoes.forEach(function (v) { var o = v.opcoes.filter(function (x) { return x.nome === i.vars[v.nome]; })[0]; if (o) add += o.acrescimo; }); i.base = p.preco; i.add = add; i.faixas = p.faixasQtd || []; i.preco = Math.round((p.preco + add) * 100) / 100; } return true; });
     if (catalogData) applyCatalog(catalogData); else { products.forEach(function (p) { if (p.modo !== 'compra') prices[p.nome.toLowerCase()] = { min: p.min, max: p.max }; }); renderCart(); }

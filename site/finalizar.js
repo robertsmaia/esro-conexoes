@@ -168,7 +168,7 @@
         i.base = p.preco; i.add = add; i.faixas = p.faixasQtd || []; i.preco = Math.round((p.preco + add) * 100) / 100; i.tipo = 'compra'; i.digital = !!p.digital; return true;
       });
       Cart.reprice(order); Cart.save(order);
-      $('#prodNote').hidden = order.every(function (i) { return i.digital; });
+      $('#prodNote').hidden = !order.some(function (i) { return !i.digital && (i.pers || i.miolo); });   // só itens feitos sob medida (personalizados) passam pela produção
       if (!order.length) return empty('Os produtos do seu pedido não estão mais disponíveis. Escolha outros na loja.');
       if (quoteOnly) { empty('Seu pedido tem itens feitos sob orçamento. Volte ao pedido para enviar tudo como pedido de orçamento.'); var a = $('#emptyBox .btn'); a.textContent = 'Voltar ao pedido'; a.href = '/#pedido'; return; }
       if (account) { $('#coWho').hidden = true; var s = $('#coSigned'); s.hidden = false; s.textContent = 'Pedido em nome de ' + account.nome + ' (' + account.email + '), com o WhatsApp ' + account.telefone + ' da sua conta.'; }

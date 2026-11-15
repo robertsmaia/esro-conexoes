@@ -1,4 +1,4 @@
-# ESRO — Loja online: passo a passo de cada recurso (versão 1.6.2)
+# ESRO — Loja online: passo a passo de cada recurso (versão 1.7)
 
 Este guia mostra como usar cada recurso novo do site e do painel. Está na ordem em que vale a pena fazer.
 
@@ -23,7 +23,7 @@ Este guia mostra como usar cada recurso novo do site e do painel. Está na ordem
 
 ---
 
-## 0. Antes de tudo: publicar a versão 1.6.2
+## 0. Antes de tudo: publicar a versão 1.7
 
 1. Abra o GitHub no repositório `esro-conexoes` → **Add file → Upload files**.
 2. Envie o arquivo **`esro-pacote.tgz`** que está na pasta `Site Esro` do computador e clique em **Commit changes**.
@@ -357,6 +357,22 @@ No primeiro deploy da 1.6.1, o servidor cadastra sozinho (uma vez só) os miolos
 - **Ver miolo completo** abre o visualizador: página atual e total, setas, teclado, deslizar no celular, miniaturas e zoom. As páginas carregam uma a uma. Sem prévia completa, o site avisa (e mostra o PDF de demonstração, se houver).
 - **Escolher este miolo** mostra o resumo (modelo, cor, tamanho, ano), os botões para seguir com os produtos ligados e uma mensagem pronta para o WhatsApp (o cliente revisa e envia; nada é enviado sozinho).
 - Na página do produto, o miolo escolhido aparece com “Trocar” e “Remover” e entra no carrinho. No pedido, aparece como **Modelo do miolo: AG1D-01 Floral · Rosa · A5 · 2027**. A escolha é opcional: sem ela, você combina o miolo com o cliente.
+
+## 16. Produtos de pronta-entrega (versão 1.7, novembro de 2026)
+
+No primeiro deploy da 1.7, o servidor cadastra sozinho (uma vez só) os 43 produtos das artes de catálogo de 14/11, com os preços das artes e a foto de cada um recortada da própria arte:
+- **Natal:** Kit Escolar Natal / Ursinho / Coelhinho (R$ 10, escolhe o tema) e Kit Escolar de Natal 12 peças (R$ 22). Aparecem primeiro na vitrine.
+- **Planners e agenda:** Planner Espiral Gatinho, Caderno de Planejamento Diário e Planner Semanal Modelo 1 (R$ 20 cada); Agenda A5 com 80 folhas (R$ 12, 11 cores).
+- **Cadernos:** Caderno Espiral Capivara (R$ 15), Kit 4 Cadernos Pequenos (R$ 20), Caderno Inteligente 8 discos (R$ 25), 10 discos (R$ 35) e 11 discos (R$ 45), cada um com o modelo para escolher.
+- **12 canetas, 12 marca-textos e 8 estojos**, cada um com o preço da arte; estojos com a cor ou estampa para escolher.
+
+Também entram:
+- a faixa **“Já é quase Natal!”** na página inicial, com os botões “Ver kits de Natal” e “Ver planners”;
+- os **filtros por categoria** na vitrine (a página inicial mostra 12 produtos e o botão “Ver todos”).
+
+O aviso “A produção começa após a confirmação do pagamento…” agora aparece só nos produtos com personalização.
+
+**O que conferir no painel (Loja online → Produtos):** estoque (os produtos entram sem controle de estoque), peso e medidas (valores aproximados, só importam se o Melhor Envio for ligado) e os nomes das cores e capas, que descrevi pelas fotos. Para tirar um produto do site, desmarque “Ativo no site”.
 
 ## 12. O que foi testado e o que ainda não
 

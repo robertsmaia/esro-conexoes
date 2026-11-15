@@ -604,3 +604,32 @@ test('Miolos da Agenda 2027: cadastro único com prévias, 3 categorias e 10 mod
   const img = await fetch(X.base + d1.galeria[0].src); assert.equal(img.status, 200); assert.equal(img.headers.get('content-type'), 'image/jpeg');
   assert.ok(Number(img.headers.get('content-length')) < 150000);   // prévia reduzida, não o arquivo de impressão
 });
+
+test('Produtos de novembro: cadastro único, preços e modelos das artes, fotos no site e compra conferida no servidor', async (t) => {
+  const { importProdutos2026_11, PRODUTOS_2026_11 } = await import('../src/produtos-2026-11.js');
+  const X = await mk({}); t.after(async () => { X.server.close(); await X.pg.close(); });
+  await X.repo.docSet('settings', 'loja', LOJA);
+  // um produto que a ESRO já tivesse editado com o mesmo id não é sobrescrito
+  await X.repo.docSet('products', 'prd_estojo_mi', { name: 'Estojo Mi (editado)', slug: 'estojo-mi', mode: 'compra', price: 39, imgs: [], vars: [], on: true });
+  const r = await importProdutos2026_11(X.repo, slugify, { log() {} });
+  assert.equal(r.criados.length, PRODUTOS_2026_11.length - 1);
+  assert.deepEqual(await importProdutos2026_11(X.repo, slugify, { log() {} }), { feito: false });
+  assert.equal((await X.repo.docGet('products', 'prd_estojo_mi')).price, 39);
+  const lista = (await (await fetch(X.base + '/api/produtos')).json()).produtos, by = Object.fromEntries(lista.map(p => [p.id, p]));
+  assert.equal(PRODUTOS_2026_11.filter(p => by[p.id]).length, PRODUTOS_2026_11.length);
+  assert.deepEqual(['prd_agenda_a5_80_folhas', 'prd_caderno_inteligente_10_discos', 'prd_caderno_inteligente_11_discos', 'prd_kit_escolar_natal_12', 'prd_marca_texto_mutic_colour', 'prd_estojo_escolar_cor_lisa'].map(id => [by[id].preco, by[id].modo, by[id].categoria]),
+    [[12, 'compra', 'Agendas'], [35, 'compra', 'Cadernos inteligentes'], [45, 'compra', 'Cadernos inteligentes'], [22, 'compra', 'Natal'], [6, 'compra', 'Marca-textos'], [10, 'compra', 'Estojos']]);
+  assert.deepEqual(by.prd_caderno_inteligente_10_discos.variacoes[0].opcoes.map(o => o.nome), ['Corações', 'Glitter ZigZag', 'Estrelas', 'Capa Colorida B5', 'Liso com Régua', 'Degradê (capa courino)', 'Coloridos Estrelas B5', 'Corações B5']);
+  assert.equal(by.prd_agenda_a5_80_folhas.variacoes[0].opcoes.length, 11);
+  // todas as fotos existem e abrem
+  const imgs = [...new Set(lista.filter(p => PRODUTOS_2026_11.some(x => x.id === p.id)).flatMap(p => p.imagens))];
+  for (const i of imgs) { const g = await fetch(X.base + i); assert.equal(g.status, 200, i); assert.equal(g.headers.get('content-type'), 'image/jpeg'); }
+  assert.equal((await fetch(X.base + '/assets/faixa-natal-2026.jpg')).status, 200);
+  // compra: modelo obrigatório, total refeito no servidor
+  const buy = (itens) => call(X.base, '/api')('POST', '/compra', compra({ itens, entrega: 'retirada', cep: '' }));
+  const sem = await buy([{ id: 'prd_caderno_inteligente_11_discos', qtd: 1, vars: {}, pers: '' }]); assert.equal(sem.status, 422);
+  const ok = await buy([{ id: 'prd_caderno_inteligente_11_discos', qtd: 2, vars: { Modelo: 'Borboletas A4' }, pers: '', preco: 1 }, { id: 'prd_caneta_coroa_real', qtd: 3, vars: {}, pers: '' }]);
+  assert.equal(ok.status, 201);
+  const o = (await X.repo.orderByPub((await ok.json()).acompanhar.split('/').pop())).data;
+  assert.equal(o.value, 2 * 45 + 3 * 8);
+});
